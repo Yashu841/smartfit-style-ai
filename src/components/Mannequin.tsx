@@ -157,7 +157,6 @@ export function Mannequin(props: MannequinProps) {
       ${cx - body.shoulder + 16} ${shoulderY + 6}
     Z
   `;
-  const rightArm = leftArm.replace(/cx - /g, "RX").replace(/RX/g, "cx + ").replace(/cx \+ body\.shoulder \+ armWidth/g, "cx - body.shoulder - armWidth"); // not used — mirror via transform instead.
 
   return (
     <div className="relative mx-auto aspect-[3/4] w-full max-w-[440px]">
