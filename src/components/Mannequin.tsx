@@ -295,7 +295,7 @@ type GarmentArgs = {
   fit: Fit;
 };
 
-function fold(color: string, opacity = 0.18) {
+function fold(_color: string, opacity = 0.18) {
   return `rgba(0,0,0,${opacity})`;
 }
 
