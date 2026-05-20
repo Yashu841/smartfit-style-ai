@@ -1,5 +1,5 @@
 import { useMemo } from "react";
-import type { Product, Silhouette } from "@/lib/catalog";
+import type { Product } from "@/lib/catalog";
 
 type Fit = "tight" | "perfect" | "relaxed" | "oversized";
 type Gender = "Female" | "Male" | "Unisex";
