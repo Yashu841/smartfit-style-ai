@@ -1,34 +1,31 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Mannequin } from "@/components/Mannequin";
 import { ConfidenceMeter } from "@/components/ConfidenceMeter";
 import { Particles } from "@/components/Particles";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Slider } from "@/components/ui/slider";
 import { cn } from "@/lib/utils";
-import outfit1 from "@/assets/outfit1.jpg";
-import outfit2 from "@/assets/outfit2.jpg";
-import outfit3 from "@/assets/outfit3.jpg";
 import {
-  Sparkles,
-  Ruler,
-  Wand2,
-  ShieldCheck,
-  ThumbsUp,
-  ThumbsDown,
-  ArrowRight,
-  RotateCw,
-  ChevronLeft,
-  AlertTriangle,
+  PRODUCTS,
+  findById,
+  similarProducts,
+  completeTheLook,
+  trendingWith,
+  whyMatches,
+  type Product,
+} from "@/lib/catalog";
+import {
+  Sparkles, Ruler, Wand2, ShieldCheck, ThumbsUp, ThumbsDown,
+  ArrowRight, RotateCw, ChevronLeft, AlertTriangle, Heart,
 } from "lucide-react";
 
 const WEBHOOK_URL = "https://hook.eu1.make.com/11jvi2slpo1x8f9ghdpqwymj4jgvebkh";
 
 type Step = "hero" | "form" | "processing" | "results";
-type Fit = "tight" | "perfect" | "relaxed";
+type Fit = "tight" | "perfect" | "relaxed" | "oversized";
 type Gender = "Female" | "Male" | "Unisex";
-type BodyType = "Slim" | "Athletic" | "Regular" | "Curvy" | "Plus";
+type BodyType = "Slim" | "Athletic" | "Regular" | "Curvy" | "Plus" | "Pear" | "Rectangle";
 type FitPref = "Slim" | "Regular" | "Relaxed" | "Oversized";
 
 type Profile = {
@@ -37,8 +34,7 @@ type Profile = {
   bodyType: BodyType;
   gender: Gender;
   fitPreference: FitPref;
-  productCategory: string;
-  brand: string;
+  productId: string;
 };
 
 type Recommendation = {
@@ -52,17 +48,18 @@ type Recommendation = {
   fallback?: boolean;
 };
 
-const CATEGORIES = ["T-Shirt", "Shirt", "Jeans", "Dress", "Jacket", "Hoodie"];
-const BRANDS = ["Roadster", "HRX", "H&M", "Zara", "Nike", "Levi's", "Mango"];
-
 const PROCESSING_STEPS = [
   "Analyzing body proportions…",
-  "Matching Myntra brand sizing…",
+  "Mapping garment to your silhouette…",
   "Cross-referencing 2M+ fit reviews…",
-  "Generating personalized fit recommendation…",
+  "Generating personalized recommendation…",
 ];
 
-function localFallbackRecommendation(p: Profile): Recommendation {
+const fitFromPref = (pref: FitPref): Fit =>
+  pref === "Slim" ? "tight" : pref === "Relaxed" ? "relaxed" : pref === "Oversized" ? "oversized" : "perfect";
+
+function localFallback(p: Profile): Recommendation {
+  const product = findById(p.productId);
   const bmi = p.weight / Math.pow(p.height / 100, 2);
   const sizes = ["XS", "S", "M", "L", "XL", "XXL"];
   let idx = 2;
@@ -74,25 +71,26 @@ function localFallbackRecommendation(p: Profile): Recommendation {
   else idx = 5;
   if (p.fitPreference === "Oversized") idx = Math.min(5, idx + 1);
   if (p.fitPreference === "Slim") idx = Math.max(0, idx - 1);
-  const fit: Fit = p.fitPreference === "Slim" ? "tight" : p.fitPreference === "Oversized" ? "relaxed" : "perfect";
-  const confidence = 72 + Math.round(Math.random() * 20);
+  if (p.bodyType === "Curvy" || p.bodyType === "Plus") idx = Math.min(5, idx + 1);
+  const fit = fitFromPref(p.fitPreference);
+  const confidence = 78 + Math.round(Math.random() * 17);
   return {
     size: sizes[idx],
     alternateSize: sizes[Math.min(5, idx + 1)],
     confidence,
     fit,
-    fitExplanation: `Based on your ${p.height}cm / ${p.weight}kg profile and ${p.fitPreference.toLowerCase()} preference, ${p.brand}'s ${p.productCategory} runs true-to-size. Size ${sizes[idx]} delivers a ${fit} silhouette across the chest and shoulders.`,
-    outfitCompatibility: 80 + Math.round(Math.random() * 15),
+    fitExplanation: `For your ${p.height}cm · ${p.weight}kg · ${p.bodyType} build, ${product.brand}'s ${product.name} runs true-to-size. Size ${sizes[idx]} delivers a ${fit} silhouette through the ${product.category === "Dress" ? "waist and bust" : "shoulders and chest"}.`,
+    outfitCompatibility: 82 + Math.round(Math.random() * 14),
     styling: [
-      `Pair with high-rise denim for a balanced silhouette`,
-      `Layer with a cropped jacket for evening looks`,
-      `Complete with minimal sneakers for streetwear edge`,
+      `Pair with ${product.gender === "Female" ? "pointed heels" : "leather boots"} to elongate the line.`,
+      `Layer a structured piece for ${product.occasion[0]?.toLowerCase()} occasions.`,
+      `Anchor the palette with neutral accessories — minimal, gold-toned.`,
     ],
   };
 }
 
 function parseRecommendation(raw: unknown, p: Profile): Recommendation {
-  const fb = localFallbackRecommendation(p);
+  const fb = localFallback(p);
   if (!raw || typeof raw !== "object") return fb;
   const r = raw as Record<string, unknown>;
   const get = (k: string) => (typeof r[k] === "string" || typeof r[k] === "number" ? String(r[k]) : undefined);
@@ -103,7 +101,7 @@ function parseRecommendation(raw: unknown, p: Profile): Recommendation {
     size,
     alternateSize: get("alternate_size") || get("alternateSize") || fb.alternateSize,
     confidence: Math.max(0, Math.min(100, Math.round(confidence > 1 ? confidence : confidence * 100))),
-    fit: ["tight", "perfect", "relaxed"].includes(fit) ? fit : fb.fit,
+    fit: ["tight", "perfect", "relaxed", "oversized"].includes(fit) ? fit : fb.fit,
     fitExplanation: get("fit_explanation") || get("explanation") || fb.fitExplanation,
     outfitCompatibility: Number(r.outfit_compatibility ?? fb.outfitCompatibility) || fb.outfitCompatibility,
     styling: Array.isArray(r.styling) ? (r.styling as string[]) : fb.styling,
@@ -115,18 +113,19 @@ export function SmartFit() {
   const [procIdx, setProcIdx] = useState(0);
   const [rotation, setRotation] = useState(0);
   const [feedback, setFeedback] = useState<"up" | "down" | null>(null);
-  const [activeOutfit, setActiveOutfit] = useState(0);
+  const [activeOutfitId, setActiveOutfitId] = useState<string | null>(null);
+  const [activeFootwearId, setActiveFootwearId] = useState<string | null>(null);
+  const [activeBagId, setActiveBagId] = useState<string | null>(null);
   const [showBefore, setShowBefore] = useState(false);
   const [rec, setRec] = useState<Recommendation | null>(null);
 
   const [profile, setProfile] = useState<Profile>({
-    height: 170,
-    weight: 65,
-    bodyType: "Athletic",
+    height: 168,
+    weight: 60,
+    bodyType: "Curvy",
     gender: "Female",
     fitPreference: "Regular",
-    productCategory: "T-Shirt",
-    brand: "Roadster",
+    productId: "zara-pink-dress",
   });
 
   useEffect(() => {
@@ -142,15 +141,20 @@ export function SmartFit() {
     setStep("processing");
     setFeedback(null);
     setRec(null);
+    setActiveOutfitId(profile.productId);
+    const product = findById(profile.productId);
     const payload = {
       height: String(profile.height),
       weight: String(profile.weight),
       body_type: profile.bodyType,
+      gender: profile.gender,
       fit_preference: profile.fitPreference,
-      product_name: profile.productCategory,
-      brand: profile.brand,
+      product_name: product.name,
+      product_category: product.category,
+      brand: product.brand,
+      color: product.color,
     };
-    const minDelay = new Promise((r) => setTimeout(r, 3600));
+    const minDelay = new Promise((r) => setTimeout(r, 3400));
     let recommendation: Recommendation;
     try {
       const res = await fetch(WEBHOOK_URL, {
@@ -163,18 +167,22 @@ export function SmartFit() {
       try { json = JSON.parse(text); } catch { json = text ? { raw: text } : null; }
       recommendation = parseRecommendation(json, profile);
     } catch {
-      recommendation = { ...localFallbackRecommendation(profile), fallback: true };
+      recommendation = { ...localFallback(profile), fallback: true };
     }
     await minDelay;
     setRec(recommendation);
     setStep("results");
+
+    // Auto-pick a complementary footwear + bag for the demo
+    const comp = completeTheLook(product, 6);
+    setActiveFootwearId(comp.find(c => c.wearableSlot === "footwear")?.id ?? null);
+    setActiveBagId(comp.find(c => c.wearableSlot === "bag")?.id ?? null);
   };
 
   return (
     <main className="relative min-h-screen overflow-x-hidden">
       <Particles count={28} />
 
-      {/* Top nav */}
       <header className="sticky top-0 z-30 backdrop-blur-xl bg-background/40 border-b border-white/5">
         <div className="mx-auto flex max-w-7xl items-center justify-between px-5 py-4">
           <div className="flex items-center gap-2.5">
@@ -185,7 +193,7 @@ export function SmartFit() {
               SmartFit <span className="gradient-text">AI</span>
             </div>
             <span className="ml-3 hidden rounded-full border border-white/10 px-2.5 py-0.5 text-[10px] uppercase tracking-widest text-muted-foreground sm:inline">
-              by Myntra
+              by Myntra Luxe
             </span>
           </div>
           {step !== "hero" && (
@@ -200,15 +208,19 @@ export function SmartFit() {
       {step === "form" && (
         <FormScreen profile={profile} setProfile={setProfile} onSubmit={submit} onBack={() => setStep("hero")} />
       )}
-      {step === "processing" && <Processing idx={procIdx} />}
+      {step === "processing" && <Processing idx={procIdx} profile={profile} />}
       {step === "results" && rec && (
         <Results
           profile={profile}
           rec={rec}
           rotation={rotation}
           setRotation={setRotation}
-          activeOutfit={activeOutfit}
-          setActiveOutfit={setActiveOutfit}
+          activeOutfitId={activeOutfitId ?? profile.productId}
+          setActiveOutfitId={setActiveOutfitId}
+          activeFootwearId={activeFootwearId}
+          setActiveFootwearId={setActiveFootwearId}
+          activeBagId={activeBagId}
+          setActiveBagId={setActiveBagId}
           showBefore={showBefore}
           setShowBefore={setShowBefore}
           feedback={feedback}
@@ -223,23 +235,24 @@ export function SmartFit() {
 /* ───────────── Hero ───────────── */
 
 function Hero({ onStart }: { onStart: () => void }) {
+  const demoProduct = findById("zara-pink-dress");
   return (
-    <section className="relative mx-auto grid max-w-7xl items-center gap-12 px-5 py-12 lg:grid-cols-2 lg:gap-8 lg:py-24">
+    <section className="relative mx-auto grid max-w-7xl items-center gap-12 px-5 py-12 lg:grid-cols-2 lg:gap-8 lg:py-20">
       <div className="space-y-8 animate-fade-up">
         <div className="inline-flex items-center gap-2 rounded-full glass px-4 py-1.5 text-xs font-medium text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-success)] animate-pulse" />
-          AI Fashion Engine · v2.4 live
+          AI Fashion Lab · v3.0 live
         </div>
         <h1 className="font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
-          Find your <span className="gradient-text">perfect fit</span> with AI.
+          Try it on. <br /><span className="gradient-text">Before you buy it.</span>
         </h1>
         <p className="max-w-xl text-lg leading-relaxed text-muted-foreground">
-          SmartFit AI analyzes your body profile, fit preference, and brand sizing patterns to recommend your ideal
-          size — instantly, with visual try-on.
+          SmartFit AI builds a virtual you — your height, weight, body type — then dresses you in the exact garment
+          you're shopping. Real silhouettes. Real drape. Real fit confidence.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button size="lg" onClick={onStart} className="h-14 rounded-full gradient-primary btn-glow px-7 text-base font-semibold">
-            Start AI Sizing <ArrowRight className="ml-2 h-5 w-5" />
+            Start virtual try-on <ArrowRight className="ml-2 h-5 w-5" />
           </Button>
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <ShieldCheck className="h-4 w-4" /> Private · No camera required
@@ -249,7 +262,7 @@ function Hero({ onStart }: { onStart: () => void }) {
           {[
             { k: "94%", v: "Fit accuracy" },
             { k: "2M+", v: "Fit reviews" },
-            { k: "<3s", v: "Recommendation" },
+            { k: "<3s", v: "Try-on render" },
           ].map((s) => (
             <div key={s.v} className="glass rounded-2xl p-4">
               <div className="font-display text-2xl font-semibold gradient-text">{s.k}</div>
@@ -261,12 +274,17 @@ function Hero({ onStart }: { onStart: () => void }) {
 
       <div className="relative animate-fade-in">
         <div className="absolute inset-0 -z-10 grid-bg opacity-40 [mask-image:radial-gradient(circle_at_center,black,transparent_70%)]" />
-        <Mannequin fit="perfect" />
+        <Mannequin
+          gender="Female" bodyType="Curvy" height={168} weight={60}
+          fit="perfect" product={demoProduct}
+          footwear={findById("acc-heels-nude")}
+          bag={findById("acc-bag-rose")}
+        />
         <FloatingBubble className="left-0 top-10" delay="0s">
           <Wand2 className="h-3.5 w-3.5" /> Hi, I'm your AI stylist
         </FloatingBubble>
         <FloatingBubble className="right-0 top-40" delay="1.2s">
-          <Ruler className="h-3.5 w-3.5" /> Tell me about your fit
+          <Ruler className="h-3.5 w-3.5" /> Wearing the actual Zara dress
         </FloatingBubble>
         <FloatingBubble className="left-4 bottom-16" delay="2.4s">
           <Sparkles className="h-3.5 w-3.5" /> 94% confidence match
@@ -276,15 +294,7 @@ function Hero({ onStart }: { onStart: () => void }) {
   );
 }
 
-function FloatingBubble({
-  children,
-  className,
-  delay = "0s",
-}: {
-  children: React.ReactNode;
-  className?: string;
-  delay?: string;
-}) {
+function FloatingBubble({ children, className, delay = "0s" }: { children: React.ReactNode; className?: string; delay?: string }) {
   return (
     <div
       className={cn(
@@ -301,10 +311,7 @@ function FloatingBubble({
 /* ───────────── Form ───────────── */
 
 function FormScreen({
-  profile,
-  setProfile,
-  onSubmit,
-  onBack,
+  profile, setProfile, onSubmit, onBack,
 }: {
   profile: Profile;
   setProfile: (p: Profile) => void;
@@ -312,57 +319,79 @@ function FormScreen({
   onBack: () => void;
 }) {
   const update = <K extends keyof Profile>(k: K, v: Profile[K]) => setProfile({ ...profile, [k]: v });
+  const product = findById(profile.productId);
+
+  const productsForGender = useMemo(
+    () => PRODUCTS.filter(p => p.wearableSlot === "outfit" && (p.gender === profile.gender || p.gender === "Unisex")),
+    [profile.gender],
+  );
+
+  // when gender changes, pick first product for that gender
+  useEffect(() => {
+    const stillValid = productsForGender.some(p => p.id === profile.productId);
+    if (!stillValid && productsForGender[0]) {
+      setProfile({ ...profile, productId: productsForGender[0].id });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [profile.gender]);
+
+  const fit: Fit = fitFromPref(profile.fitPreference);
+
   return (
-    <section className="mx-auto grid max-w-7xl gap-10 px-5 py-10 lg:grid-cols-[1fr_1.1fr] lg:py-16">
+    <section className="mx-auto grid max-w-7xl gap-10 px-5 py-10 lg:grid-cols-[420px_1fr] lg:py-14">
+      {/* Live preview column */}
       <div className="order-2 lg:order-1">
-        <div className="lg:sticky lg:top-28">
-          <Mannequin fit={profile.fitPreference === "Slim" ? "tight" : profile.fitPreference === "Oversized" ? "relaxed" : "perfect"} />
-          <div className="mt-4 text-center">
-            <div className="text-xs uppercase tracking-widest text-muted-foreground">Live preview</div>
-            <div className="font-display text-lg">{profile.fitPreference} {profile.productCategory}</div>
+        <div className="lg:sticky lg:top-24 space-y-4">
+          <Mannequin
+            gender={profile.gender}
+            bodyType={profile.bodyType}
+            height={profile.height}
+            weight={profile.weight}
+            fit={fit}
+            product={product}
+          />
+          <div className="glass rounded-2xl p-4 text-center">
+            <div className="text-[10px] uppercase tracking-widest text-[var(--color-myntra-glow)]">Live virtual try-on</div>
+            <div className="font-display text-base mt-1">{product.brand} · {product.name}</div>
+            <div className="text-xs text-muted-foreground mt-1">
+              {profile.gender} · {profile.bodyType} · {profile.height}cm · {profile.fitPreference} fit
+            </div>
           </div>
         </div>
       </div>
 
       <div className="order-1 lg:order-2 space-y-7 animate-fade-up">
         <div>
-          <div className="text-xs uppercase tracking-widest text-[var(--color-myntra-glow)]">Step 01 · Your profile</div>
+          <div className="text-xs uppercase tracking-widest text-[var(--color-myntra-glow)]">Step 01 · Your body & style</div>
           <h2 className="mt-2 font-display text-4xl font-semibold tracking-tight">
-            A few details. <span className="gradient-text">Magic in seconds.</span>
+            Build your avatar. <span className="gradient-text">Dress it instantly.</span>
           </h2>
         </div>
 
-        <div className="glass-strong space-y-7 rounded-3xl p-6 sm:p-8">
+        <div className="glass-strong space-y-6 rounded-3xl p-6 sm:p-7">
           <SliderField label="Height" unit="cm" value={profile.height} min={140} max={210} onChange={(v) => update("height", v)} />
           <SliderField label="Weight" unit="kg" value={profile.weight} min={35} max={150} onChange={(v) => update("weight", v)} />
 
-          <PillGroup
-            label="Gender"
+          <PillGroup label="Gender"
             options={["Female", "Male", "Unisex"] as Gender[]}
-            value={profile.gender}
-            onChange={(v) => update("gender", v)}
-          />
-          <PillGroup
-            label="Body Type"
-            options={["Slim", "Athletic", "Regular", "Curvy", "Plus"] as BodyType[]}
-            value={profile.bodyType}
-            onChange={(v) => update("bodyType", v)}
-          />
-          <PillGroup
-            label="Preferred Fit"
+            value={profile.gender} onChange={(v) => update("gender", v)} />
+          <PillGroup label="Body Type"
+            options={["Slim", "Athletic", "Regular", "Curvy", "Pear", "Rectangle", "Plus"] as BodyType[]}
+            value={profile.bodyType} onChange={(v) => update("bodyType", v)} />
+          <PillGroup label="Preferred Fit"
             options={["Slim", "Regular", "Relaxed", "Oversized"] as FitPref[]}
-            value={profile.fitPreference}
-            onChange={(v) => update("fitPreference", v)}
-          />
+            value={profile.fitPreference} onChange={(v) => update("fitPreference", v)} />
+        </div>
 
-          <div className="grid gap-5 sm:grid-cols-2">
-            <FloatingSelect
-              label="Product Category"
-              value={profile.productCategory}
-              options={CATEGORIES}
-              onChange={(v) => update("productCategory", v)}
-            />
-            <FloatingSelect label="Brand" value={profile.brand} options={BRANDS} onChange={(v) => update("brand", v)} />
+        <div className="space-y-3">
+          <div className="flex items-baseline justify-between">
+            <h3 className="font-display text-lg font-semibold">Pick your outfit</h3>
+            <span className="text-xs text-muted-foreground">{productsForGender.length} curated · live try-on updates</span>
+          </div>
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+            {productsForGender.map((p) => (
+              <ProductTile key={p.id} product={p} active={p.id === profile.productId} onClick={() => update("productId", p.id)} />
+            ))}
           </div>
         </div>
 
@@ -370,11 +399,8 @@ function FormScreen({
           <Button variant="ghost" onClick={onBack} className="text-muted-foreground">
             <ChevronLeft className="mr-1 h-4 w-4" /> Back
           </Button>
-          <Button
-            size="lg"
-            onClick={onSubmit}
-            className="h-14 rounded-full gradient-primary btn-glow px-8 text-base font-semibold"
-          >
+          <Button size="lg" onClick={onSubmit}
+            className="h-14 rounded-full gradient-primary btn-glow px-8 text-base font-semibold">
             Generate my fit <Sparkles className="ml-2 h-5 w-5" />
           </Button>
         </div>
@@ -383,28 +409,76 @@ function FormScreen({
   );
 }
 
-function SliderField({
-  label,
-  unit,
-  value,
-  min,
-  max,
-  onChange,
-}: {
-  label: string;
-  unit: string;
-  value: number;
-  min: number;
-  max: number;
-  onChange: (v: number) => void;
+function ProductTile({ product, active, onClick }: { product: Product; active: boolean; onClick: () => void }) {
+  return (
+    <button onClick={onClick}
+      className={cn(
+        "group relative overflow-hidden rounded-2xl border p-3 text-left transition-all",
+        active
+          ? "border-[var(--color-myntra-glow)] bg-white/[0.04] btn-glow"
+          : "border-white/10 bg-white/[0.02] hover:border-white/25",
+      )}>
+      <div className="relative h-28 w-full overflow-hidden rounded-xl"
+        style={{
+          background: `radial-gradient(120% 90% at 30% 20%, ${product.accent ?? product.color}, ${product.color} 60%, #0b0b12 110%)`,
+        }}>
+        {/* tiny silhouette icon */}
+        <ProductIcon product={product} />
+        <div className="absolute inset-x-1 bottom-1 flex items-center justify-between">
+          <span className="rounded-full bg-black/55 px-2 py-0.5 text-[9px] uppercase tracking-wider text-white/90">{product.category}</span>
+          <span className="h-3.5 w-3.5 rounded-full ring-2 ring-white/30" style={{ background: product.color }} />
+        </div>
+      </div>
+      <div className="mt-2 flex items-baseline justify-between gap-2">
+        <div className="min-w-0">
+          <div className="truncate text-[11px] uppercase tracking-wider text-muted-foreground">{product.brand}</div>
+          <div className="truncate text-sm font-medium">{product.name}</div>
+        </div>
+        <div className="shrink-0 text-xs font-semibold">₹{product.price.toLocaleString("en-IN")}</div>
+      </div>
+    </button>
+  );
+}
+
+function ProductIcon({ product }: { product: Product }) {
+  // tiny SVG hint of silhouette
+  const c = product.color;
+  const a = product.accent ?? c;
+  const s = product.silhouette;
+  return (
+    <svg viewBox="0 0 100 100" className="absolute inset-0 m-auto h-full w-full opacity-90">
+      {s.includes("dress") && (
+        <path d="M40,18 L60,18 L70,82 Q50,92 30,82 Z" fill={c} stroke={a} strokeWidth="0.6" />
+      )}
+      {(s === "shirt" || s === "blouse" || s === "tshirt") && (
+        <path d="M28,22 L42,18 L50,28 L58,18 L72,22 L78,40 L70,42 L70,82 L30,82 L30,42 L22,40 Z" fill={c} />
+      )}
+      {(s === "blazer" || s === "biker-jacket") && (
+        <path d="M26,20 L42,18 L50,32 L58,18 L74,20 L72,84 L52,84 L50,40 L48,84 L28,84 Z" fill={c} />
+      )}
+      {s === "hoodie" && (
+        <>
+          <path d="M30,22 Q50,4 70,22 L76,42 L70,42 L70,82 L30,82 L30,42 L24,42 Z" fill={c} />
+          <rect x="40" y="58" width="20" height="14" fill={a} opacity="0.6" />
+        </>
+      )}
+      {(s === "skinny-jeans" || s === "wide-jeans" || s === "trousers") && (
+        <path d="M32,18 L68,18 L66,82 L54,82 L50,40 L46,82 L34,82 Z" fill={c} />
+      )}
+      {s === "mini-skirt" && <path d="M32,38 L68,38 L74,72 L26,72 Z" fill={c} />}
+    </svg>
+  );
+}
+
+function SliderField({ label, unit, value, min, max, onChange }: {
+  label: string; unit: string; value: number; min: number; max: number; onChange: (v: number) => void;
 }) {
   return (
     <div className="space-y-3">
       <div className="flex items-baseline justify-between">
         <Label className="text-sm font-medium text-muted-foreground">{label}</Label>
         <span className="font-display text-2xl font-semibold">
-          {value}
-          <span className="ml-1 text-sm font-normal text-muted-foreground">{unit}</span>
+          {value}<span className="ml-1 text-sm font-normal text-muted-foreground">{unit}</span>
         </span>
       </div>
       <Slider value={[value]} min={min} max={max} step={1} onValueChange={([v]) => onChange(v)} />
@@ -412,16 +486,8 @@ function SliderField({
   );
 }
 
-function PillGroup<T extends string>({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string;
-  options: T[];
-  value: T;
-  onChange: (v: T) => void;
+function PillGroup<T extends string>({ label, options, value, onChange }: {
+  label: string; options: T[]; value: T; onChange: (v: T) => void;
 }) {
   return (
     <div className="space-y-2.5">
@@ -430,17 +496,13 @@ function PillGroup<T extends string>({
         {options.map((o) => {
           const active = o === value;
           return (
-            <button
-              key={o}
-              type="button"
-              onClick={() => onChange(o)}
+            <button key={o} type="button" onClick={() => onChange(o)}
               className={cn(
                 "rounded-full border px-4 py-2 text-sm font-medium transition-all",
                 active
                   ? "border-transparent gradient-primary text-white btn-glow"
                   : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-foreground hover:border-white/20",
-              )}
-            >
+              )}>
               {o}
             </button>
           );
@@ -450,76 +512,50 @@ function PillGroup<T extends string>({
   );
 }
 
-function FloatingSelect({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: string;
-  options: string[];
-  onChange: (v: string) => void;
-}) {
-  return (
-    <div className="relative">
-      <Label className="absolute -top-2 left-3 z-10 bg-card px-1.5 text-[11px] font-medium uppercase tracking-wider text-muted-foreground">
-        {label}
-      </Label>
-      <select
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="h-12 w-full rounded-xl border border-white/10 bg-white/[0.04] px-4 text-sm text-foreground outline-none transition-all focus:border-[var(--color-myntra-glow)] focus:ring-2 focus:ring-[var(--color-myntra-glow)]/30"
-      >
-        {options.map((o) => (
-          <option key={o} value={o} className="bg-card">
-            {o}
-          </option>
-        ))}
-      </select>
-    </div>
-  );
-}
-
 /* ───────────── Processing ───────────── */
 
-function Processing({ idx }: { idx: number }) {
+function Processing({ idx, profile }: { idx: number; profile: Profile }) {
+  const product = findById(profile.productId);
   return (
     <section className="mx-auto grid min-h-[80vh] max-w-7xl place-items-center px-5 py-12">
       <div className="grid w-full items-center gap-12 lg:grid-cols-2">
-        <Mannequin scanning />
+        <Mannequin
+          scanning
+          gender={profile.gender}
+          bodyType={profile.bodyType}
+          height={profile.height}
+          weight={profile.weight}
+          product={product}
+          fit={fitFromPref(profile.fitPreference)}
+        />
         <div className="space-y-8 animate-fade-up">
           <div className="text-xs uppercase tracking-widest text-[var(--color-myntra-glow)]">AI processing</div>
           <h2 className="font-display text-4xl font-semibold leading-tight tracking-tight">
-            Reading your <span className="gradient-text">body signature</span>…
+            Mapping the <span className="gradient-text">{product.name}</span> to your body…
           </h2>
           <div className="space-y-3">
             {PROCESSING_STEPS.map((s, i) => {
               const state = i < idx ? "done" : i === idx ? "active" : "pending";
               return (
-                <div
-                  key={s}
+                <div key={s}
                   className={cn(
                     "flex items-center gap-3 rounded-2xl border px-4 py-3 transition-all",
                     state === "done" && "border-[var(--color-success)]/30 bg-[var(--color-success)]/5",
                     state === "active" && "border-[var(--color-myntra-glow)]/40 bg-[var(--color-myntra-glow)]/5 glass-strong",
                     state === "pending" && "border-white/5 opacity-50",
-                  )}
-                >
-                  <div
-                    className={cn(
-                      "grid h-7 w-7 place-items-center rounded-full text-xs font-bold",
-                      state === "done" && "bg-[var(--color-success)] text-black",
-                      state === "active" && "gradient-primary text-white",
-                      state === "pending" && "bg-white/5 text-muted-foreground",
-                    )}
-                  >
+                  )}>
+                  <div className={cn(
+                    "grid h-7 w-7 place-items-center rounded-full text-xs font-bold",
+                    state === "done" && "bg-[var(--color-success)] text-black",
+                    state === "active" && "gradient-primary text-white",
+                    state === "pending" && "bg-white/5 text-muted-foreground",
+                  )}>
                     {state === "done" ? "✓" : i + 1}
                   </div>
                   <span className={cn("text-sm", state === "active" && "font-medium")}>{s}</span>
                   {state === "active" && (
                     <span className="ml-auto inline-flex gap-1">
-                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--color-myntra-glow)]" style={{ animationDelay: "0s" }} />
+                      <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--color-myntra-glow)]" />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--color-myntra-glow)]" style={{ animationDelay: "0.15s" }} />
                       <span className="h-1.5 w-1.5 animate-bounce rounded-full bg-[var(--color-myntra-glow)]" style={{ animationDelay: "0.3s" }} />
                     </span>
@@ -537,24 +573,22 @@ function Processing({ idx }: { idx: number }) {
 /* ───────────── Results ───────────── */
 
 function Results({
-  profile,
-  rec,
-  rotation,
-  setRotation,
-  activeOutfit,
-  setActiveOutfit,
-  showBefore,
-  setShowBefore,
-  feedback,
-  setFeedback,
-  onRetry,
+  profile, rec, rotation, setRotation,
+  activeOutfitId, setActiveOutfitId,
+  activeFootwearId, setActiveFootwearId,
+  activeBagId, setActiveBagId,
+  showBefore, setShowBefore, feedback, setFeedback, onRetry,
 }: {
   profile: Profile;
   rec: Recommendation;
   rotation: number;
   setRotation: (n: number) => void;
-  activeOutfit: number;
-  setActiveOutfit: (n: number) => void;
+  activeOutfitId: string;
+  setActiveOutfitId: (id: string) => void;
+  activeFootwearId: string | null;
+  setActiveFootwearId: (id: string | null) => void;
+  activeBagId: string | null;
+  setActiveBagId: (id: string | null) => void;
   showBefore: boolean;
   setShowBefore: (b: boolean) => void;
   feedback: "up" | "down" | null;
@@ -562,68 +596,73 @@ function Results({
   onRetry: () => void;
 }) {
   const lowConfidence = rec.confidence < 70;
-  const outfits = [
-    { img: outfit1, name: "Editorial Power", tag: "Trending" },
-    { img: outfit2, name: "Tailored Noir", tag: "Recommended" },
-    { img: outfit3, name: "Street Luxe", tag: "New" },
-  ];
+  const outfit = findById(activeOutfitId);
+  const footwear = activeFootwearId ? findById(activeFootwearId) : null;
+  const bag = activeBagId ? findById(activeBagId) : null;
+
+  const similar = useMemo(() => similarProducts(outfit, 6), [outfit]);
+  const complete = useMemo(() => completeTheLook(outfit, 6), [outfit]);
+  const trending = useMemo(() => trendingWith(outfit, 6), [outfit]);
+
+  const fitState: Fit = rec.fit;
 
   return (
     <section className="mx-auto max-w-7xl space-y-10 px-5 py-10 lg:py-14">
-      <div className="grid items-start gap-10 lg:grid-cols-[1.05fr_1fr]">
+      <div className="grid items-start gap-10 lg:grid-cols-[480px_1fr]">
         {/* Mannequin column */}
-        <div className="space-y-4 animate-fade-up">
+        <div className="space-y-4 animate-fade-up lg:sticky lg:top-24">
           <div className="glass-strong rounded-3xl p-6">
             <div className="mb-2 flex items-center justify-between">
               <span className="rounded-full bg-[var(--color-success)]/15 px-3 py-1 text-xs font-semibold text-[var(--color-success)]">
-                {rec.fit === "perfect" ? "Perfect Fit" : rec.fit === "tight" ? "Tight Fit" : "Relaxed Fit"}
+                {fitState === "perfect" ? "Perfect Fit" : fitState === "tight" ? "Tight Fit" : fitState === "oversized" ? "Oversized" : "Relaxed Fit"}
               </span>
               <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowBefore(!showBefore)}
-                  className="rounded-full border border-white/10 px-3 py-1.5 text-xs hover:border-white/30"
-                >
-                  {showBefore ? "After" : "Before"}
+                <button onClick={() => setShowBefore(!showBefore)}
+                  className="rounded-full border border-white/10 px-3 py-1.5 text-xs hover:border-white/30">
+                  {showBefore ? "Show after" : "Show before"}
                 </button>
-                <button
-                  onClick={() => setRotation(rotation + 90)}
+                <button onClick={() => setRotation(rotation + 30)}
                   className="grid h-8 w-8 place-items-center rounded-full border border-white/10 hover:border-white/30"
-                  aria-label="Rotate"
-                >
+                  aria-label="Rotate">
                   <RotateCw className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
             <Mannequin
-              fit={showBefore ? (profile.fitPreference === "Oversized" ? "tight" : "relaxed") : rec.fit}
+              gender={profile.gender}
+              bodyType={profile.bodyType}
+              height={profile.height}
+              weight={profile.weight}
+              fit={showBefore ? (fitState === "oversized" ? "tight" : "relaxed") : fitState}
               rotation={rotation}
+              product={outfit}
+              footwear={footwear}
+              bag={bag}
+              showSkeleton={showBefore}
             />
+            <div className="mt-3 text-center">
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">Now wearing</div>
+              <div className="font-display text-base">{outfit.brand} · {outfit.name}</div>
+            </div>
           </div>
 
-          {/* Try-on carousel */}
-          <div className="space-y-2">
-            <div className="flex items-baseline justify-between">
-              <h3 className="font-display text-lg font-semibold">See similar looks</h3>
-              <span className="text-xs text-muted-foreground">AI styled · {profile.brand}</span>
+          {/* Fit visualization meter */}
+          <div className="glass rounded-2xl p-4">
+            <div className="mb-2 flex items-center justify-between text-xs">
+              <span className="uppercase tracking-widest text-muted-foreground">Fit visualization</span>
+              <span className="font-semibold gradient-text">{fitState.toUpperCase()}</span>
             </div>
-            <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1 snap-x">
-              {outfits.map((o, i) => (
-                <button
-                  key={o.name}
-                  onClick={() => setActiveOutfit(i)}
+            <div className="flex gap-1.5">
+              {(["tight","perfect","relaxed","oversized"] as Fit[]).map(f => (
+                <div key={f}
                   className={cn(
-                    "group relative shrink-0 snap-start overflow-hidden rounded-2xl border transition-all",
-                    "h-48 w-36",
-                    activeOutfit === i ? "border-[var(--color-myntra-glow)] btn-glow" : "border-white/10 hover:border-white/30",
-                  )}
-                >
-                  <img src={o.img} alt={o.name} loading="lazy" className="h-full w-full object-cover transition-transform group-hover:scale-105" />
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/90 to-transparent p-3 text-left">
-                    <div className="text-[10px] uppercase tracking-wider text-[var(--color-myntra-glow)]">{o.tag}</div>
-                    <div className="text-xs font-medium">{o.name}</div>
-                  </div>
-                </button>
+                    "h-2 flex-1 rounded-full transition-all",
+                    f === fitState ? "gradient-primary btn-glow" : "bg-white/8",
+                  )} />
               ))}
+            </div>
+            <div className="mt-2 flex justify-between text-[10px] uppercase tracking-widest text-muted-foreground">
+              <span>Tight</span><span>Perfect</span><span>Relaxed</span><span>Oversized</span>
             </div>
           </div>
         </div>
@@ -631,10 +670,9 @@ function Results({
         {/* Results panel */}
         <div className="space-y-5 animate-fade-up">
           <div className="text-xs uppercase tracking-widest text-[var(--color-myntra-glow)]">
-            AI Recommendation · {profile.brand} {profile.productCategory}
+            AI Recommendation · {outfit.brand} {outfit.category}
           </div>
 
-          {/* Big size card */}
           <div className="glass-strong relative overflow-hidden rounded-3xl p-7">
             <div className="absolute -right-12 -top-12 h-48 w-48 rounded-full opacity-50 blur-3xl gradient-primary" />
             <div className="relative">
@@ -646,7 +684,6 @@ function Results({
                 </div>
               </div>
               <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">{rec.fitExplanation}</p>
-
               <div className="mt-6 grid gap-5 sm:grid-cols-2">
                 <ConfidenceMeter value={rec.confidence} label="Fit confidence" />
                 <ConfidenceMeter value={rec.outfitCompatibility} label="Outfit compatibility" />
@@ -654,15 +691,13 @@ function Results({
             </div>
           </div>
 
-          {/* Low confidence fallback */}
           {lowConfidence && (
             <div className="flex gap-3 rounded-2xl border border-[var(--color-destructive)]/30 bg-[var(--color-destructive)]/5 p-4">
               <AlertTriangle className="h-5 w-5 shrink-0 text-[var(--color-destructive)]" />
               <div className="text-sm">
                 <div className="font-semibold">Low confidence match</div>
                 <p className="mt-1 text-muted-foreground">
-                  {profile.brand}'s {profile.productCategory} has limited fit data for your profile. We suggest checking
-                  the brand size chart, or trying both {rec.size} and {rec.alternateSize}.
+                  {outfit.brand}'s {outfit.category} has limited fit data for your profile. We suggest trying both {rec.size} and {rec.alternateSize}.
                 </p>
                 <button onClick={onRetry} className="mt-2 text-xs font-medium text-[var(--color-myntra-glow)] underline-offset-4 hover:underline">
                   Refine my profile →
@@ -671,9 +706,55 @@ function Results({
             </div>
           )}
 
-          {/* Styling tips */}
+          {/* Complete the look */}
+          {complete.length > 0 && (
+            <CarouselSection
+              eyebrow="AI Stylist"
+              title="Complete the look"
+              subtitle={`Curated to pair with your ${outfit.category.toLowerCase()}`}
+              items={complete}
+              base={outfit}
+              onWear={(p) => {
+                if (p.wearableSlot === "footwear") setActiveFootwearId(p.id);
+                else if (p.wearableSlot === "bag") setActiveBagId(p.id);
+                else if (p.wearableSlot === "outfit") setActiveOutfitId(p.id);
+              }}
+            />
+          )}
+
+          {/* Similar */}
+          {similar.length > 0 && (
+            <CarouselSection
+              eyebrow="Similar styles"
+              title={`More ${outfit.gender === "Female" ? "women's" : outfit.gender === "Male" ? "men's" : ""} ${outfit.category.toLowerCase()}s like this`}
+              subtitle={`Same silhouette, different mood`}
+              items={similar}
+              base={outfit}
+              onWear={(p) => setActiveOutfitId(p.id)}
+            />
+          )}
+
+          {/* Trending with */}
+          {trending.length > 0 && (
+            <CarouselSection
+              eyebrow="Trending with this outfit"
+              title="Shoppers also styled with"
+              subtitle={`${outfit.aesthetic} edits picked by SmartFit`}
+              items={trending}
+              base={outfit}
+              onWear={(p) => {
+                if (p.wearableSlot === "footwear") setActiveFootwearId(p.id);
+                else if (p.wearableSlot === "bag") setActiveBagId(p.id);
+                else if (p.wearableSlot === "outfit") setActiveOutfitId(p.id);
+              }}
+            />
+          )}
+
+          {/* Stylist notes */}
           <div className="glass rounded-3xl p-6">
-            <h3 className="font-display text-lg font-semibold">Stylist notes</h3>
+            <h3 className="font-display text-lg font-semibold flex items-center gap-2">
+              <Wand2 className="h-4 w-4 text-[var(--color-myntra-glow)]" /> Stylist notes
+            </h3>
             <ul className="mt-3 space-y-2.5">
               {rec.styling.map((s, i) => (
                 <li key={i} className="flex gap-3 text-sm text-muted-foreground">
@@ -689,7 +770,7 @@ function Results({
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <Sparkles className="h-3.5 w-3.5 text-[var(--color-myntra-glow)]" />
-                AI-generated recommendation · Your data never leaves Myntra
+                AI-generated · Your data never leaves Myntra
               </div>
               <div className="flex items-center gap-2">
                 <FeedbackBtn active={feedback === "up"} onClick={() => setFeedback("up")} icon={<ThumbsUp className="h-3.5 w-3.5" />} label="Helpful" />
@@ -717,32 +798,82 @@ function Results({
   );
 }
 
-function FeedbackBtn({
-  active,
-  onClick,
-  icon,
-  label,
+function CarouselSection({
+  eyebrow, title, subtitle, items, base, onWear,
 }: {
-  active: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
+  eyebrow: string;
+  title: string;
+  subtitle?: string;
+  items: Product[];
+  base: Product;
+  onWear: (p: Product) => void;
 }) {
   return (
-    <button
-      onClick={onClick}
+    <div className="space-y-3">
+      <div>
+        <div className="text-[10px] uppercase tracking-widest text-[var(--color-myntra-glow)]">{eyebrow}</div>
+        <div className="mt-0.5 flex items-baseline justify-between gap-3">
+          <h3 className="font-display text-lg font-semibold">{title}</h3>
+          {subtitle && <span className="hidden text-xs text-muted-foreground sm:block">{subtitle}</span>}
+        </div>
+      </div>
+      <div className="-mx-1 flex snap-x gap-3 overflow-x-auto px-1 pb-2">
+        {items.map((p) => (
+          <RecommendationCard key={p.id} product={p} reason={whyMatches(base, p)} onWear={() => onWear(p)} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RecommendationCard({ product, reason, onWear }: { product: Product; reason: string; onWear: () => void }) {
+  return (
+    <div className="group relative w-[200px] shrink-0 snap-start overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] transition-all hover:border-white/25 hover:bg-white/[0.04]">
+      <div className="relative h-44 w-full overflow-hidden"
+        style={{
+          background: `radial-gradient(120% 90% at 30% 20%, ${product.accent ?? product.color}, ${product.color} 60%, #0b0b12 110%)`,
+        }}>
+        <ProductIcon product={product} />
+        <button onClick={onWear}
+          className="absolute inset-x-2 bottom-2 rounded-full bg-white/95 px-3 py-2 text-[11px] font-semibold text-black opacity-0 transition-opacity group-hover:opacity-100">
+          Wear it now
+        </button>
+        <Heart className="absolute right-2 top-2 h-4 w-4 text-white/70 hover:text-white" />
+      </div>
+      <div className="p-3 space-y-1">
+        <div className="flex items-center justify-between">
+          <span className="text-[10px] uppercase tracking-wider text-muted-foreground">{product.brand}</span>
+          <span className="text-xs font-semibold">₹{product.price.toLocaleString("en-IN")}</span>
+        </div>
+        <div className="line-clamp-1 text-sm font-medium">{product.name}</div>
+        <div className="line-clamp-2 text-[11px] leading-snug text-muted-foreground">
+          <Sparkles className="mr-1 inline h-3 w-3 text-[var(--color-myntra-glow)]" />
+          {reason}
+        </div>
+        <div className="flex flex-wrap gap-1 pt-1">
+          {product.occasion.slice(0, 2).map((o) => (
+            <span key={o} className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">{o}</span>
+          ))}
+          <span className="rounded-full bg-white/[0.06] px-2 py-0.5 text-[9px] uppercase tracking-wider text-muted-foreground">{product.aesthetic}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function FeedbackBtn({ active, onClick, icon, label }: {
+  active: boolean; onClick: () => void; icon: React.ReactNode; label: string;
+}) {
+  return (
+    <button onClick={onClick}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-medium transition-all",
         active
           ? "border-[var(--color-myntra-glow)] bg-[var(--color-myntra-glow)]/15 text-foreground"
           : "border-white/10 text-muted-foreground hover:border-white/30 hover:text-foreground",
-      )}
-    >
+      )}>
       {icon}
       {label}
     </button>
   );
 }
-
-// Silence unused import lint
-void Input;
