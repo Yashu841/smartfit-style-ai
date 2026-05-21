@@ -607,8 +607,8 @@ function Results({
   const fitState: Fit = rec.fit;
 
   return (
-    <section className="mx-auto max-w-7xl space-y-10 px-5 py-10 lg:py-14">
-      <div className="grid items-start gap-10 lg:grid-cols-[480px_1fr]">
+    <section className="mx-auto max-w-[1400px] space-y-10 px-6 py-10 sm:px-10 lg:px-16 lg:py-16">
+      <div className="grid items-start gap-12 lg:grid-cols-[minmax(420px,480px)_1fr] lg:gap-16 xl:gap-20">
         {/* Mannequin column */}
         <div className="space-y-4 animate-fade-up lg:sticky lg:top-24">
           <div className="glass-strong rounded-3xl p-6">
@@ -668,23 +668,23 @@ function Results({
         </div>
 
         {/* Results panel */}
-        <div className="space-y-5 animate-fade-up">
-          <div className="text-xs uppercase tracking-widest text-[var(--color-myntra-glow)]">
+        <div className="space-y-7 animate-fade-up">
+          <div className="text-xs uppercase tracking-[0.22em] text-[var(--color-myntra-glow)]">
             AI Recommendation · {outfit.brand} {outfit.category}
           </div>
 
-          <div className="glass-strong relative overflow-hidden rounded-3xl p-7">
-            <div className="absolute -right-12 -top-12 h-48 w-48 rounded-full opacity-50 blur-3xl gradient-primary" />
+          <div className="glass-strong relative overflow-hidden rounded-3xl p-8 sm:p-10">
+            <div className="absolute -right-16 -top-16 h-56 w-56 rounded-full opacity-50 blur-3xl gradient-primary" />
             <div className="relative">
               <div className="text-sm text-muted-foreground">Your perfect size</div>
-              <div className="mt-1 flex items-end gap-4">
-                <div className="font-display text-7xl font-bold tracking-tighter gradient-text">{rec.size}</div>
+              <div className="mt-2 flex items-end gap-5">
+                <div className="font-display text-7xl font-bold tracking-tighter gradient-text leading-none">{rec.size}</div>
                 <div className="mb-2 text-sm text-muted-foreground">
                   alt. <span className="font-semibold text-foreground">{rec.alternateSize}</span>
                 </div>
               </div>
-              <p className="mt-4 max-w-md text-sm leading-relaxed text-muted-foreground">{rec.fitExplanation}</p>
-              <div className="mt-6 grid gap-5 sm:grid-cols-2">
+              <p className="mt-5 max-w-xl text-sm leading-relaxed text-muted-foreground">{rec.fitExplanation}</p>
+              <div className="mt-8 grid gap-6 sm:grid-cols-2">
                 <ConfidenceMeter value={rec.confidence} label="Fit confidence" />
                 <ConfidenceMeter value={rec.outfitCompatibility} label="Outfit compatibility" />
               </div>
