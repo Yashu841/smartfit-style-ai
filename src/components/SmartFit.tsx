@@ -144,15 +144,18 @@ export function SmartFit() {
     setActiveOutfitId(profile.productId);
     const product = findById(profile.productId);
     const payload = {
-      height: String(profile.height),
-      weight: String(profile.weight),
-      body_type: profile.bodyType,
+      height: profile.height,
+      weight: profile.weight,
       gender: profile.gender,
+      body_type: profile.bodyType,
       fit_preference: profile.fitPreference,
-      product_name: product.name,
-      product_category: product.category,
-      brand: product.brand,
-      color: product.color,
+      selected_outfit: {
+        id: product.id,
+        name: product.name,
+        brand: product.brand,
+        category: product.category,
+        color: product.color,
+      },
     };
     const minDelay = new Promise((r) => setTimeout(r, 3400));
     let recommendation: Recommendation;
@@ -162,11 +165,14 @@ export function SmartFit() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (!res.ok) throw new Error(`Webhook responded ${res.status}`);
       const text = await res.text();
       let json: unknown = null;
       try { json = JSON.parse(text); } catch { json = text ? { raw: text } : null; }
       recommendation = parseRecommendation(json, profile);
-    } catch {
+    } catch (err) {
+      console.error("SmartFit webhook failed:", err);
+      toast.error("AI service unreachable — showing offline recommendation.");
       recommendation = { ...localFallback(profile), fallback: true };
     }
     await minDelay;
