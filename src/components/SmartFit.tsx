@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Mannequin } from "@/components/Mannequin";
 import { ConfidenceMeter } from "@/components/ConfidenceMeter";
 import { Particles } from "@/components/Particles";
@@ -99,10 +100,10 @@ function parseRecommendation(raw: unknown, p: Profile): Recommendation {
   const fit = (get("fit") as Fit) || fb.fit;
   return {
     size,
-    alternateSize: get("alternate_size") || get("alternateSize") || fb.alternateSize,
+    alternateSize: get("alternative_size") || get("alternate_size") || get("alternateSize") || fb.alternateSize,
     confidence: Math.max(0, Math.min(100, Math.round(confidence > 1 ? confidence : confidence * 100))),
     fit: ["tight", "perfect", "relaxed", "oversized"].includes(fit) ? fit : fb.fit,
-    fitExplanation: get("fit_explanation") || get("explanation") || fb.fitExplanation,
+    fitExplanation: get("reasoning") || get("fit_explanation") || get("explanation") || fb.fitExplanation,
     outfitCompatibility: Number(r.outfit_compatibility ?? fb.outfitCompatibility) || fb.outfitCompatibility,
     styling: Array.isArray(r.styling) ? (r.styling as string[]) : fb.styling,
   };
@@ -144,15 +145,18 @@ export function SmartFit() {
     setActiveOutfitId(profile.productId);
     const product = findById(profile.productId);
     const payload = {
-      height: String(profile.height),
-      weight: String(profile.weight),
-      body_type: profile.bodyType,
+      height: profile.height,
+      weight: profile.weight,
       gender: profile.gender,
+      body_type: profile.bodyType,
       fit_preference: profile.fitPreference,
-      product_name: product.name,
-      product_category: product.category,
-      brand: product.brand,
-      color: product.color,
+      selected_outfit: {
+        id: product.id,
+        name: product.name,
+        brand: product.brand,
+        category: product.category,
+        color: product.color,
+      },
     };
     const minDelay = new Promise((r) => setTimeout(r, 3400));
     let recommendation: Recommendation;
@@ -162,11 +166,14 @@ export function SmartFit() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
+      if (!res.ok) throw new Error(`Webhook responded ${res.status}`);
       const text = await res.text();
       let json: unknown = null;
       try { json = JSON.parse(text); } catch { json = text ? { raw: text } : null; }
       recommendation = parseRecommendation(json, profile);
-    } catch {
+    } catch (err) {
+      console.error("SmartFit webhook failed:", err);
+      toast.error("AI service unreachable — showing offline recommendation.");
       recommendation = { ...localFallback(profile), fallback: true };
     }
     await minDelay;
