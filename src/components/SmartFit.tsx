@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { toast } from "sonner";
 import { Mannequin } from "@/components/Mannequin";
 import { ConfidenceMeter } from "@/components/ConfidenceMeter";
 import { Particles } from "@/components/Particles";
