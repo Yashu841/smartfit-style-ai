@@ -99,10 +99,10 @@ function parseRecommendation(raw: unknown, p: Profile): Recommendation {
   const fit = (get("fit") as Fit) || fb.fit;
   return {
     size,
-    alternateSize: get("alternate_size") || get("alternateSize") || fb.alternateSize,
+    alternateSize: get("alternative_size") || get("alternate_size") || get("alternateSize") || fb.alternateSize,
     confidence: Math.max(0, Math.min(100, Math.round(confidence > 1 ? confidence : confidence * 100))),
     fit: ["tight", "perfect", "relaxed", "oversized"].includes(fit) ? fit : fb.fit,
-    fitExplanation: get("fit_explanation") || get("explanation") || fb.fitExplanation,
+    fitExplanation: get("reasoning") || get("fit_explanation") || get("explanation") || fb.fitExplanation,
     outfitCompatibility: Number(r.outfit_compatibility ?? fb.outfitCompatibility) || fb.outfitCompatibility,
     styling: Array.isArray(r.styling) ? (r.styling as string[]) : fb.styling,
   };
