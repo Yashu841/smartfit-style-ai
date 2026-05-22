@@ -816,18 +816,29 @@ function CarouselSection({
 }
 
 function RecommendationCard({ product, reason, onWear }: { product: Product; reason: string; onWear: () => void }) {
+  const img = OUTFIT_IMAGE_MAP[product.id];
   return (
-    <div className="group relative w-[200px] shrink-0 snap-start overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] transition-all hover:border-white/25 hover:bg-white/[0.04]">
-      <div className="relative h-44 w-full overflow-hidden"
-        style={{
-          background: `radial-gradient(120% 90% at 30% 20%, ${product.accent ?? product.color}, ${product.color} 60%, #0b0b12 110%)`,
-        }}>
-        <ProductIcon product={product} />
+    <div className="group relative w-[220px] shrink-0 snap-start overflow-hidden rounded-2xl border border-white/10 bg-white/[0.02] transition-all hover:border-white/25 hover:bg-white/[0.04]">
+      <div className="relative h-56 w-full overflow-hidden bg-gradient-to-br from-[#1a0f24] to-[#08050d]">
+        {img ? (
+          <img
+            src={img}
+            alt={`${product.brand} ${product.name}`}
+            width={1024}
+            height={1024}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.05]"
+          />
+        ) : (
+          <div className="absolute inset-0"
+            style={{ background: `radial-gradient(120% 90% at 30% 20%, ${product.accent ?? product.color}, ${product.color} 60%, #0b0b12 110%)` }} />
+        )}
         <button onClick={onWear}
           className="absolute inset-x-2 bottom-2 rounded-full bg-white/95 px-3 py-2 text-[11px] font-semibold text-black opacity-0 transition-opacity group-hover:opacity-100">
           Wear it now
         </button>
-        <Heart className="absolute right-2 top-2 h-4 w-4 text-white/70 hover:text-white" />
+        <Heart className="absolute right-2 top-2 h-4 w-4 text-white/80 drop-shadow hover:text-white" />
       </div>
       <div className="p-3 space-y-1">
         <div className="flex items-center justify-between">
