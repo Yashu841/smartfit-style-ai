@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
-import { Mannequin } from "@/components/Mannequin";
+import { Mannequin, OUTFIT_IMAGE_MAP } from "@/components/Mannequin";
 import { ConfidenceMeter } from "@/components/ConfidenceMeter";
 import { Particles } from "@/components/Particles";
 import { Button } from "@/components/ui/button";
@@ -417,6 +417,7 @@ function FormScreen({
 }
 
 function ProductTile({ product, active, onClick }: { product: Product; active: boolean; onClick: () => void }) {
+  const img = OUTFIT_IMAGE_MAP[product.id];
   return (
     <button onClick={onClick}
       className={cn(
@@ -425,14 +426,25 @@ function ProductTile({ product, active, onClick }: { product: Product; active: b
           ? "border-[var(--color-myntra-glow)] bg-white/[0.04] btn-glow"
           : "border-white/10 bg-white/[0.02] hover:border-white/25",
       )}>
-      <div className="relative h-28 w-full overflow-hidden rounded-xl"
-        style={{
-          background: `radial-gradient(120% 90% at 30% 20%, ${product.accent ?? product.color}, ${product.color} 60%, #0b0b12 110%)`,
-        }}>
-        {/* tiny silhouette icon */}
-        <ProductIcon product={product} />
+      <div className="relative h-36 w-full overflow-hidden rounded-xl bg-gradient-to-br from-[#1a0f24] to-[#08050d]">
+        {img ? (
+          <img
+            src={img}
+            alt={`${product.brand} ${product.name}`}
+            width={1024}
+            height={1024}
+            loading="lazy"
+            decoding="async"
+            className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.04]"
+          />
+        ) : (
+          <div className="absolute inset-0"
+            style={{ background: `radial-gradient(120% 90% at 30% 20%, ${product.accent ?? product.color}, ${product.color} 60%, #0b0b12 110%)` }} />
+        )}
         <div className="absolute inset-x-1 bottom-1 flex items-center justify-between">
-          <span className="rounded-full bg-black/55 px-2 py-0.5 text-[9px] uppercase tracking-wider text-white/90">{product.category}</span>
+          <span className="rounded-full bg-black/55 px-2 py-0.5 text-[9px] uppercase tracking-wider text-white/90 backdrop-blur">
+            {product.category}
+          </span>
           <span className="h-3.5 w-3.5 rounded-full ring-2 ring-white/30" style={{ background: product.color }} />
         </div>
       </div>
@@ -444,36 +456,6 @@ function ProductTile({ product, active, onClick }: { product: Product; active: b
         <div className="shrink-0 text-xs font-semibold">₹{product.price.toLocaleString("en-IN")}</div>
       </div>
     </button>
-  );
-}
-
-function ProductIcon({ product }: { product: Product }) {
-  // tiny SVG hint of silhouette
-  const c = product.color;
-  const a = product.accent ?? c;
-  const s = product.silhouette;
-  return (
-    <svg viewBox="0 0 100 100" className="absolute inset-0 m-auto h-full w-full opacity-90">
-      {s.includes("dress") && (
-        <path d="M40,18 L60,18 L70,82 Q50,92 30,82 Z" fill={c} stroke={a} strokeWidth="0.6" />
-      )}
-      {(s === "shirt" || s === "blouse" || s === "tshirt") && (
-        <path d="M28,22 L42,18 L50,28 L58,18 L72,22 L78,40 L70,42 L70,82 L30,82 L30,42 L22,40 Z" fill={c} />
-      )}
-      {(s === "blazer" || s === "biker-jacket") && (
-        <path d="M26,20 L42,18 L50,32 L58,18 L74,20 L72,84 L52,84 L50,40 L48,84 L28,84 Z" fill={c} />
-      )}
-      {s === "hoodie" && (
-        <>
-          <path d="M30,22 Q50,4 70,22 L76,42 L70,42 L70,82 L30,82 L30,42 L24,42 Z" fill={c} />
-          <rect x="40" y="58" width="20" height="14" fill={a} opacity="0.6" />
-        </>
-      )}
-      {(s === "skinny-jeans" || s === "wide-jeans" || s === "trousers") && (
-        <path d="M32,18 L68,18 L66,82 L54,82 L50,40 L46,82 L34,82 Z" fill={c} />
-      )}
-      {s === "mini-skirt" && <path d="M32,38 L68,38 L74,72 L26,72 Z" fill={c} />}
-    </svg>
   );
 }
 
