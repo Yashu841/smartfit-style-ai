@@ -1,8 +1,5 @@
-import { useMemo } from "react";
+import { useEffect, useId, useMemo, useState } from "react";
 import type { Product } from "@/lib/catalog";
-
-import baseFemale from "@/assets/mannequin/base-female.jpg";
-import baseMale from "@/assets/mannequin/base-male.jpg";
 import zaraPinkDress from "@/assets/mannequin/zara-pink-dress.jpg";
 import hmBlackMini from "@/assets/mannequin/hm-black-mini.jpg";
 import mangoFloral from "@/assets/mannequin/mango-floral.jpg";
@@ -56,42 +53,252 @@ export type MannequinProps = {
   showSkeleton?: boolean;
 };
 
-/**
- * Compute realistic body adaptation via CSS transform.
- * - height → vertical scale
- * - weight → horizontal scale (volume)
- * - bodyType → additional shoulder/hip emphasis via skew + tweaks
- */
-function useBodyTransform(
-  height: number, weight: number, gender: Gender, bodyType: BodyType, fit: Fit,
-) {
-  return useMemo(() => {
-    const hScale = Math.max(0.92, Math.min(1.08, 0.92 + (height - 150) / 60 * 0.16));
-    let wScale = Math.max(0.88, Math.min(1.22, 0.9 + (weight - 50) / 80 * 0.32));
+type BodyMeasurements = {
+  cx: number;
+  topY: number;
+  floorY: number;
+  headY: number;
+  headRx: number;
+  headRy: number;
+  neckY: number;
+  shoulderY: number;
+  bustY: number;
+  waistY: number;
+  hipY: number;
+  crotchY: number;
+  kneeY: number;
+  ankleY: number;
+  elbowY: number;
+  wristY: number;
+  shoulderW: number;
+  chestW: number;
+  waistW: number;
+  hipW: number;
+  thighW: number;
+  calfW: number;
+  armW: number;
+  footW: number;
+  posture: number;
+  depth: number;
+};
 
-    const mods: Record<BodyType, { w: number; topW?: number; botW?: number }> = {
-      Slim:      { w: 0.94 },
-      Athletic:  { w: 1.02, topW: 1.06 },
-      Regular:   { w: 1.0 },
-      Curvy:     { w: 1.04, topW: 1.02, botW: 1.08 },
-      Plus:      { w: 1.12, topW: 1.10, botW: 1.14 },
-      Pear:      { w: 1.02, topW: 0.96, botW: 1.10 },
-      Rectangle: { w: 1.0 },
+type SilhouettePaths = {
+  torso: string;
+  neck: string;
+  leftArm: string;
+  rightArm: string;
+  leftLeg: string;
+  rightLeg: string;
+};
+
+type BodyScale = {
+  heightT: number;
+  massT: number;
+  heightScale: number;
+};
+
+const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
+const normalize = (value: number, min: number, max: number) => clamp((value - min) / (max - min), 0, 1) * 2 - 1;
+const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
+
+function calculateBodyScale(height: number, weight: number): BodyScale {
+  const heightT = normalize(height, 140, 210);
+  const bmi = weight / Math.pow(height / 100, 2);
+  const bmiMass = normalize(bmi, 17, 34);
+  const rawMass = normalize(weight, 40, 140);
+  const massT = clamp(bmiMass * 0.72 + rawMass * 0.28, -1, 1);
+  return { heightT, massT, heightScale: 1 + heightT * 0.16 };
+}
+
+function calculateBodyMeasurements(height: number, weight: number, gender: Gender, bodyType: BodyType): BodyMeasurements {
+  const { heightT, massT, heightScale } = calculateBodyScale(height, weight);
+  const cx = 160;
+  const floorY = 522;
+  const bodyHeight = 418 * heightScale;
+  const topY = floorY - bodyHeight;
+
+  const typeMods: Record<BodyType, Partial<Record<"shoulder" | "chest" | "waist" | "hip" | "thigh" | "arm" | "posture" | "limb", number>>> = {
+    Slim: { shoulder: -7, chest: -10, waist: -15, hip: -8, thigh: -6, arm: -4, posture: 1, limb: 6 },
+    Athletic: { shoulder: 16, chest: 11, waist: -7, hip: -1, thigh: 5, arm: 5, posture: 4, limb: 2 },
+    Regular: { shoulder: 0, chest: 0, waist: 0, hip: 0, thigh: 0, arm: 0, posture: 0, limb: 0 },
+    Curvy: { shoulder: 1, chest: 9, waist: -9, hip: 20, thigh: 8, arm: 2, posture: 1, limb: -1 },
+    Pear: { shoulder: -12, chest: -4, waist: -3, hip: 24, thigh: 10, arm: 1, posture: 0, limb: -1 },
+    Rectangle: { shoulder: 4, chest: 4, waist: 10, hip: 5, thigh: 2, arm: 1, posture: -1, limb: 0 },
+    Plus: { shoulder: 13, chest: 20, waist: 29, hip: 30, thigh: 16, arm: 9, posture: -2, limb: -4 },
+  };
+
+  const genderMods = {
+    Female: { shoulder: -5, chest: 5, waist: -4, hip: 10, thigh: 3, arm: -1, posture: 1 },
+    Male: { shoulder: 17, chest: 12, waist: 7, hip: -6, thigh: 2, arm: 3, posture: 3 },
+    Unisex: { shoulder: 3, chest: 2, waist: 2, hip: 1, thigh: 1, arm: 1, posture: 1 },
+  }[gender];
+  const tm = typeMods[bodyType];
+
+  const add = (base: number, part: keyof typeof genderMods, massGain: number, min: number, max: number) =>
+    clamp(base + massT * massGain + (tm[part] ?? 0) + genderMods[part], min, max);
+
+  const shoulderW = add(92, "shoulder", 13, 66, 138);
+  const chestW = add(82, "chest", 19, 56, 132);
+  const waistW = add(58, "waist", 31, 42, 126);
+  const hipW = add(84, "hip", 27, 56, 146);
+  const thighW = add(29, "thigh", 12, 18, 54);
+  const armW = add(14, "arm", 6, 9, 30);
+  const limbBoost = tm.limb ?? 0;
+
+  const headY = topY + 24;
+  const neckY = topY + 56;
+  const shoulderY = topY + 84 + heightT * 3;
+  const bustY = shoulderY + 34;
+  const waistY = shoulderY + 86 + heightT * 13;
+  const hipY = waistY + 58 + heightT * 7;
+  const crotchY = hipY + 22;
+  const ankleY = floorY - 18;
+  const kneeY = crotchY + (ankleY - crotchY) * 0.53;
+  const elbowY = shoulderY + 88 + heightT * 10 + limbBoost;
+  const wristY = clamp(shoulderY + 188 + heightT * 24 + limbBoost * 1.7, hipY + 36, ankleY - 64);
+
+  return {
+    cx,
+    topY,
+    floorY,
+    headY,
+    headRx: clamp(19 + massT * 2.2 + (gender === "Male" ? 1.5 : 0), 17, 24),
+    headRy: clamp(25 + heightT * 1.5 + massT * 1.2, 22, 29),
+    neckY,
+    shoulderY,
+    bustY,
+    waistY,
+    hipY,
+    crotchY,
+    kneeY,
+    ankleY,
+    elbowY,
+    wristY,
+    shoulderW,
+    chestW,
+    waistW,
+    hipW,
+    thighW,
+    calfW: clamp(18 + massT * 6 + (tm.thigh ?? 0) * 0.24, 12, 32),
+    armW,
+    footW: clamp(22 + heightT * 2.5 + massT * 1.5, 18, 28),
+    posture: (tm.posture ?? 0) + genderMods.posture,
+    depth: clamp(0.9 + massT * 0.24 + (bodyType === "Plus" ? 0.14 : 0), 0.72, 1.35),
+  };
+}
+
+function interpolateMeasurements(from: BodyMeasurements, to: BodyMeasurements, progress: number): BodyMeasurements {
+  const next = {} as BodyMeasurements;
+  (Object.keys(to) as Array<keyof BodyMeasurements>).forEach((key) => {
+    next[key] = from[key] + (to[key] - from[key]) * progress;
+  });
+  return next;
+}
+
+function useInterpolatedMeasurements(target: BodyMeasurements) {
+  const [current, setCurrent] = useState(target);
+
+  useEffect(() => {
+    const start = current;
+    const startedAt = performance.now();
+    const duration = 320;
+    let frame = 0;
+
+    const tick = (now: number) => {
+      const progress = easeOutCubic(clamp((now - startedAt) / duration, 0, 1));
+      setCurrent(interpolateMeasurements(start, target, progress));
+      if (progress < 1) frame = requestAnimationFrame(tick);
     };
-    const m = mods[bodyType];
-    wScale *= m.w;
-    if (gender === "Male") wScale *= 1.02;
 
-    // Fit influences subtle silhouette puff via filter; mostly handled by chosen outfit image
-    const fitGlow = fit === "oversized" ? 1.04 : fit === "relaxed" ? 1.02 : 1.0;
+    frame = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(frame);
+  }, [target]);
 
-    return {
-      transform: `translateZ(0) scale(${wScale * fitGlow}, ${hScale})`,
-      transformOrigin: "50% 92%",
-      topW: m.topW ?? 1,
-      botW: m.botW ?? 1,
-    };
-  }, [height, weight, gender, bodyType, fit]);
+  return current;
+}
+
+function generateSilhouette(m: BodyMeasurements): SilhouettePaths {
+  const { cx } = m;
+  const torso = [
+    `M ${cx - m.shoulderW / 2 + m.posture * 0.25} ${m.shoulderY}`,
+    `C ${cx - m.chestW / 2 - 10} ${m.bustY - 18}, ${cx - m.chestW / 2} ${m.bustY + 4}, ${cx - m.chestW / 2} ${m.bustY}`,
+    `C ${cx - m.waistW / 2 - 7} ${m.waistY - 26}, ${cx - m.waistW / 2} ${m.waistY - 4}, ${cx - m.waistW / 2} ${m.waistY}`,
+    `C ${cx - m.hipW / 2 - 4} ${m.hipY - 18}, ${cx - m.hipW / 2} ${m.hipY - 2}, ${cx - m.hipW / 2} ${m.hipY}`,
+    `C ${cx - m.hipW * 0.36} ${m.hipY + 16}, ${cx - 18} ${m.crotchY - 5}, ${cx - 10} ${m.crotchY}`,
+    `L ${cx + 10} ${m.crotchY}`,
+    `C ${cx + 18} ${m.crotchY - 5}, ${cx + m.hipW * 0.36} ${m.hipY + 16}, ${cx + m.hipW / 2} ${m.hipY}`,
+    `C ${cx + m.hipW / 2} ${m.hipY - 2}, ${cx + m.waistW / 2} ${m.waistY - 4}, ${cx + m.waistW / 2} ${m.waistY}`,
+    `C ${cx + m.waistW / 2 + 7} ${m.waistY - 26}, ${cx + m.chestW / 2} ${m.bustY + 4}, ${cx + m.chestW / 2} ${m.bustY}`,
+    `C ${cx + m.chestW / 2 + 10} ${m.bustY - 18}, ${cx + m.shoulderW / 2 + m.posture * 0.25} ${m.shoulderY}, ${cx + m.shoulderW / 2 + m.posture * 0.25} ${m.shoulderY}`,
+    `C ${cx + 24} ${m.shoulderY - 11}, ${cx - 24} ${m.shoulderY - 11}, ${cx - m.shoulderW / 2 + m.posture * 0.25} ${m.shoulderY}`,
+    "Z",
+  ].join(" ");
+
+  const neck = `M ${cx - 15} ${m.neckY + 1} C ${cx - 12} ${m.shoulderY - 20}, ${cx + 12} ${m.shoulderY - 20}, ${cx + 15} ${m.neckY + 1} L ${cx + 21} ${m.shoulderY + 8} C ${cx + 8} ${m.shoulderY + 16}, ${cx - 8} ${m.shoulderY + 16}, ${cx - 21} ${m.shoulderY + 8} Z`;
+
+  return {
+    torso,
+    neck,
+    leftArm: armPath(m, -1),
+    rightArm: armPath(m, 1),
+    leftLeg: legPath(m, -1),
+    rightLeg: legPath(m, 1),
+  };
+}
+
+function armPath(m: BodyMeasurements, side: -1 | 1) {
+  const x = (offset: number) => m.cx + side * offset;
+  const s = side;
+  return [
+    `M ${x(m.shoulderW / 2 - 8)} ${m.shoulderY + 7}`,
+    `C ${x(m.shoulderW / 2 + m.armW * 1.7)} ${m.shoulderY + 28}, ${x(m.shoulderW / 2 + m.armW * 1.95)} ${m.elbowY - 14}, ${x(m.shoulderW / 2 + m.armW * 1.15)} ${m.elbowY}`,
+    `C ${x(m.hipW / 2 + m.armW * 0.95)} ${m.wristY - 28}, ${x(m.hipW / 2 + m.armW * 0.65)} ${m.wristY - 8}, ${x(m.hipW / 2 + m.armW * 0.55)} ${m.wristY}`,
+    `C ${x(m.hipW / 2 + 2)} ${m.wristY + 10}, ${x(m.hipW / 2 - m.armW * 0.22)} ${m.wristY + 3}, ${x(m.hipW / 2 - m.armW * 0.16)} ${m.wristY - 7}`,
+    `C ${x(m.shoulderW / 2 - m.armW * 0.12)} ${m.elbowY - 4}, ${x(m.shoulderW / 2 - 18)} ${m.shoulderY + 22}, ${x(m.shoulderW / 2 - 8)} ${m.shoulderY + 7}`,
+    "Z",
+  ].join(" ").replaceAll("-0", "0").replaceAll(`${s * 0}`, "0");
+}
+
+function legPath(m: BodyMeasurements, side: -1 | 1) {
+  const x = (offset: number) => m.cx + side * offset;
+  return [
+    `M ${x(9)} ${m.crotchY - 1}`,
+    `C ${x(12)} ${m.crotchY + 30}, ${x(m.calfW * 0.35)} ${m.kneeY - 4}, ${x(7)} ${m.ankleY}`,
+    `L ${x(m.footW)} ${m.ankleY + 8}`,
+    `C ${x(m.footW * 0.2)} ${m.ankleY + 14}, ${x(-m.footW * 0.18)} ${m.ankleY + 11}, ${x(-3)} ${m.ankleY}`,
+    `C ${x(-m.thighW * 0.16)} ${m.kneeY - 8}, ${x(m.hipW * 0.34)} ${m.hipY + 34}, ${x(m.hipW * 0.34)} ${m.hipY + 12}`,
+    `C ${x(m.hipW * 0.27)} ${m.hipY + 26}, ${x(18)} ${m.crotchY - 7}, ${x(9)} ${m.crotchY - 1}`,
+    "Z",
+  ].join(" ");
+}
+
+type GarmentFit = {
+  shoulderW: number;
+  chestW: number;
+  waistW: number;
+  hipW: number;
+  sleeveW: number;
+  thighW: number;
+  hemW: number;
+  drape: number;
+};
+
+function applyGarmentFit(product: Product, m: BodyMeasurements, fit: Fit): GarmentFit {
+  const ease = fit === "tight" ? -5 : fit === "perfect" ? 3 : fit === "relaxed" ? 13 : 24;
+  const structure = ["Blazer", "Jacket", "Hoodie"].includes(product.category) ? 1.3 : 1;
+  const slimContour = fit === "tight" ? 0.96 : 1;
+  const drape = (fit === "oversized" ? 20 : fit === "relaxed" ? 12 : fit === "tight" ? -3 : 5) + m.depth * 6;
+
+  return {
+    shoulderW: Math.max(54, m.shoulderW + ease * structure + (product.category === "Blazer" || product.category === "Jacket" ? 12 : 0)),
+    chestW: Math.max(48, (m.chestW + ease * 1.15) * slimContour),
+    waistW: Math.max(38, (m.waistW + ease * 0.9 + (fit === "oversized" ? 8 : 0)) * slimContour),
+    hipW: Math.max(50, m.hipW + ease * 1.05 + (["Dress", "Skirt", "Hoodie", "Blazer", "Jacket"].includes(product.category) ? 8 : 0)),
+    sleeveW: Math.max(10, m.armW + ease * 0.45 + (product.category === "Hoodie" ? 7 : product.category === "Blazer" || product.category === "Jacket" ? 4 : 0)),
+    thighW: Math.max(18, m.thighW + ease * 0.45 + (product.silhouette === "wide-jeans" ? 8 : 0)),
+    hemW: Math.max(58, m.hipW + ease + drape),
+    drape,
+  };
 }
 
 export function Mannequin(props: MannequinProps) {
