@@ -342,12 +342,23 @@ export function Mannequin(props: MannequinProps) {
     showSkeleton = false,
   } = props;
 
-  const baseImg = gender === "Male" ? baseMale : baseFemale;
-  const productImg = product ? OUTFIT_IMAGE_MAP[product.id] : null;
-  const showProduct = !showSkeleton && productImg;
-  const imgSrc = showProduct ? productImg! : baseImg;
-
-  const t = useBodyTransform(height, weight, gender, bodyType, fit);
+  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
+  const targetMeasurements = useMemo(
+    () => calculateBodyMeasurements(height, weight, gender, bodyType),
+    [height, weight, gender, bodyType],
+  );
+  const measurements = useInterpolatedMeasurements(targetMeasurements);
+  const silhouette = useMemo(() => generateSilhouette(measurements), [measurements]);
+  const garmentFit = useMemo(
+    () => (product ? applyGarmentFit(product, measurements, fit) : null),
+    [product, measurements, fit],
+  );
+  const garmentPaths = useMemo(
+    () => (product && garmentFit ? generateGarmentPaths(product, measurements, garmentFit) : null),
+    [product, measurements, garmentFit],
+  );
+  const showProduct = !showSkeleton && product && garmentFit && garmentPaths;
+  const massLabel = calculateBodyScale(height, weight).massT;
 
   return (
     <div className="relative mx-auto aspect-[3/5] w-full max-w-[520px] select-none">
@@ -380,28 +391,79 @@ export function Mannequin(props: MannequinProps) {
           transition: "transform 700ms cubic-bezier(0.16, 1, 0.3, 1)",
         }}
       >
-        {/* Mannequin photo with body-adaptive transform + crossfade between outfits */}
-        <div
-          key={imgSrc}
-          className="absolute inset-0 flex items-end justify-center animate-fade-in"
-          style={{ animationDuration: "600ms" }}
+        <svg
+          role="img"
+          aria-label={product ? `Reactive AI mannequin wearing ${product.name}` : "Reactive AI fitting mannequin"}
+          viewBox="0 0 320 540"
+          className="absolute inset-0 h-full w-full overflow-visible"
+          style={{ filter: "drop-shadow(0 34px 46px rgba(0,0,0,0.55)) drop-shadow(0 0 34px rgba(180,90,200,0.16))" }}
         >
-          <img
-            src={imgSrc}
-            alt={product ? `Mannequin wearing ${product.name}` : "Virtual fitting mannequin"}
-            width={1024}
-            height={1024}
-            loading="eager"
-            decoding="async"
-            className="h-full w-full object-contain will-change-transform"
-            style={{
-              transform: t.transform,
-              transformOrigin: t.transformOrigin,
-              filter: "drop-shadow(0 30px 50px rgba(0,0,0,0.55)) drop-shadow(0 0 30px rgba(180,90,200,0.18))",
-              animation: "float 7s ease-in-out infinite",
-            }}
-          />
-        </div>
+          <defs>
+            <linearGradient id={`body-${uid}`} x1="90" x2="230" y1="70" y2="520" gradientUnits="userSpaceOnUse">
+              <stop stopColor="oklch(0.88 0.018 305)" />
+              <stop offset="0.46" stopColor="oklch(0.58 0.025 300)" />
+              <stop offset="1" stopColor="oklch(0.27 0.025 300)" />
+            </linearGradient>
+            <radialGradient id={`body-highlight-${uid}`} cx="38%" cy="20%" r="75%">
+              <stop stopColor="white" stopOpacity="0.34" />
+              <stop offset="0.35" stopColor="white" stopOpacity="0.08" />
+              <stop offset="1" stopColor="black" stopOpacity="0.28" />
+            </radialGradient>
+            <linearGradient id={`garment-${uid}`} x1="90" x2="230" y1="110" y2="430" gradientUnits="userSpaceOnUse">
+              <stop stopColor={product?.accent ?? product?.color ?? "oklch(0.7 0.26 350)"} />
+              <stop offset="0.52" stopColor={product?.color ?? "oklch(0.62 0.26 320)"} />
+              <stop offset="1" stopColor={product?.color ?? "oklch(0.45 0.16 300)"} stopOpacity="0.72" />
+            </linearGradient>
+            <linearGradient id={`garment-shine-${uid}`} x1="94" x2="218" y1="116" y2="420" gradientUnits="userSpaceOnUse">
+              <stop stopColor="white" stopOpacity="0.34" />
+              <stop offset="0.28" stopColor="white" stopOpacity="0.04" />
+              <stop offset="0.72" stopColor="black" stopOpacity="0.08" />
+              <stop offset="1" stopColor="black" stopOpacity="0.2" />
+            </linearGradient>
+            <filter id={`soft-shadow-${uid}`} x="-35%" y="-20%" width="170%" height="155%">
+              <feDropShadow dx="0" dy="12" stdDeviation="12" floodColor="black" floodOpacity="0.33" />
+            </filter>
+          </defs>
+
+          <ellipse cx="160" cy="520" rx={72 + measurements.hipW * 0.28} ry="14" fill="black" opacity="0.34" />
+          <ellipse cx="160" cy="514" rx={52 + measurements.hipW * 0.18} ry="7" fill="oklch(0.7 0.26 350)" opacity="0.18" />
+
+          <g filter={`url(#soft-shadow-${uid})`} style={{ transformBox: "fill-box", transformOrigin: "center bottom", animation: "float 7s ease-in-out infinite" }}>
+            <g opacity="0.98">
+              <path d={silhouette.leftArm} fill={`url(#body-${uid})`} />
+              <path d={silhouette.rightArm} fill={`url(#body-${uid})`} />
+              <path d={silhouette.leftLeg} fill={`url(#body-${uid})`} />
+              <path d={silhouette.rightLeg} fill={`url(#body-${uid})`} />
+              <path d={silhouette.torso} fill={`url(#body-${uid})`} />
+              <path d={silhouette.neck} fill={`url(#body-${uid})`} />
+              <ellipse cx={measurements.cx} cy={measurements.headY} rx={measurements.headRx} ry={measurements.headRy} fill={`url(#body-${uid})`} />
+              <path d={silhouette.torso} fill={`url(#body-highlight-${uid})`} opacity="0.5" />
+              <ellipse cx={measurements.cx - 6} cy={measurements.headY - 6} rx={measurements.headRx * 0.58} ry={measurements.headRy * 0.7} fill="white" opacity="0.08" />
+            </g>
+
+            {showProduct && (
+              <GarmentLayer
+                product={product}
+                paths={garmentPaths}
+                fit={garmentFit}
+                measurements={measurements}
+                gradientId={`garment-${uid}`}
+                shineId={`garment-shine-${uid}`}
+              />
+            )}
+
+            <g pointerEvents="none" opacity="0.34" mixBlendMode="screen">
+              <path d={`M ${measurements.cx - measurements.chestW * 0.18} ${measurements.shoulderY + 22} C ${measurements.cx - 4} ${measurements.waistY - 8}, ${measurements.cx - 7} ${measurements.hipY + 34}, ${measurements.cx - 4} ${measurements.kneeY}`} stroke="white" strokeWidth="1.2" fill="none" />
+              <path d={`M ${measurements.cx + measurements.chestW * 0.2} ${measurements.shoulderY + 26} C ${measurements.cx + 8} ${measurements.waistY - 2}, ${measurements.cx + 10} ${measurements.hipY + 30}, ${measurements.cx + 6} ${measurements.kneeY}`} stroke="white" strokeWidth="0.8" fill="none" opacity="0.45" />
+            </g>
+          </g>
+
+          <g opacity="0.78">
+            <line x1="46" x2="46" y1={measurements.topY + 8} y2={measurements.floorY - 10} stroke="oklch(0.7 0.26 350)" strokeWidth="1" strokeDasharray="3 7" />
+            <text x="58" y={measurements.topY + 22} fill="oklch(0.7 0.02 300)" fontSize="9" letterSpacing="1.4">{height}CM</text>
+            <text x="58" y={measurements.topY + 37} fill="oklch(0.7 0.26 350)" fontSize="8" letterSpacing="1.1">MORPH {massLabel > 0.45 ? "FULL" : massLabel < -0.35 ? "SLIM" : "BALANCED"}</text>
+          </g>
+        </svg>
 
         {/* Top spotlight wash */}
         <div
