@@ -777,12 +777,22 @@ function Results({
                 <FeedbackBtn active={feedback === "down"} onClick={() => setFeedback("down")} icon={<ThumbsDown className="h-3.5 w-3.5" />} label="Wrong size" />
               </div>
             </div>
-            {feedback && (
-              <div className="mt-3 text-xs text-[var(--color-myntra-glow)] animate-fade-in">
-                Thanks — your feedback trains SmartFit for future shoppers.
+          {/* Trust + quick feedback */}
+          <div className="glass rounded-3xl p-5">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <Sparkles className="h-3.5 w-3.5 text-[var(--color-myntra-glow)]" />
+                AI-generated · Your data never leaves Myntra
               </div>
-            )}
+              <div className="flex items-center gap-2">
+                <FeedbackBtn active={feedback === "up"} onClick={() => setFeedback("up")} icon={<ThumbsUp className="h-3.5 w-3.5" />} label="Helpful" />
+                <FeedbackBtn active={feedback === "down"} onClick={() => setFeedback("down")} icon={<ThumbsDown className="h-3.5 w-3.5" />} label="Wrong size" />
+              </div>
+            </div>
           </div>
+
+          {/* Detailed feedback */}
+          <FeedbackSection productId={outfit.id} recommendedSize={rec.size} />
 
           <div className="flex gap-3">
             <Button size="lg" className="h-14 flex-1 rounded-full gradient-primary btn-glow text-base font-semibold">
@@ -792,6 +802,7 @@ function Results({
               Try another
             </Button>
           </div>
+
         </div>
       </div>
     </section>
