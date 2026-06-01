@@ -887,3 +887,171 @@ function FeedbackBtn({ active, onClick, icon, label }: {
     </button>
   );
 }
+
+/* ───────────── Feedback Section ───────────── */
+
+const SIZES = ["XS", "S", "M", "L", "XL", "XXL"];
+
+function FeedbackSection({ productId, recommendedSize }: { productId: string; recommendedSize: string }) {
+  const [accuracy, setAccuracy] = useState<"yes" | "no" | null>(null);
+  const [wouldBuy, setWouldBuy] = useState<"yes" | "no" | null>(null);
+  const [selectedSize, setSelectedSize] = useState<string>(recommendedSize);
+  const [fitRating, setFitRating] = useState<number>(0);
+  const [feedbackText, setFeedbackText] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const [submitted, setSubmitted] = useState(false);
+
+  useEffect(() => {
+    setSelectedSize(recommendedSize);
+    setAccuracy(null); setWouldBuy(null); setFitRating(0); setFeedbackText(""); setSubmitted(false);
+  }, [productId, recommendedSize]);
+
+  const canSubmit = accuracy !== null && wouldBuy !== null && fitRating > 0 && !submitting;
+
+  const handleSubmit = async () => {
+    if (!canSubmit) {
+      toast.error("Please answer all required fields before submitting.");
+      return;
+    }
+    setSubmitting(true);
+    const payload = {
+      user_id: getUserId(),
+      product_id: productId,
+      recommended_size: recommendedSize,
+      selected_size: selectedSize,
+      fit_rating: fitRating,
+      feedback_text: feedbackText.trim().slice(0, 1000),
+      would_buy: wouldBuy === "yes",
+      recommendation_accurate: accuracy === "yes",
+      submitted_at: new Date().toISOString(),
+    };
+    try {
+      const res = await fetch(FEEDBACK_WEBHOOK_URL, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      if (!res.ok) throw new Error(`Webhook ${res.status}`);
+      setSubmitted(true);
+      toast.success("Thanks! Your feedback helps SmartFit get smarter.");
+    } catch (err) {
+      console.error("Feedback webhook failed:", err);
+      toast.error("Couldn't submit feedback — please try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (submitted) {
+    return (
+      <div className="glass-strong rounded-3xl p-6 animate-fade-in">
+        <div className="flex items-center gap-3">
+          <div className="grid h-10 w-10 place-items-center rounded-full gradient-primary btn-glow">
+            <Heart className="h-4 w-4 text-white" />
+          </div>
+          <div>
+            <div className="font-display text-lg font-semibold">Feedback received</div>
+            <p className="text-sm text-muted-foreground">SmartFit just got a little smarter — thank you.</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="glass-strong rounded-3xl p-6 sm:p-7 space-y-6 animate-fade-up">
+      <div>
+        <div className="text-[10px] uppercase tracking-widest text-[var(--color-myntra-glow)]">Help us improve</div>
+        <h3 className="mt-1 font-display text-xl font-semibold">How was this recommendation?</h3>
+        <p className="text-xs text-muted-foreground mt-1">Your input trains SmartFit's fit model in real time.</p>
+      </div>
+
+      <FbYesNo label="Was the recommendation accurate?" value={accuracy} onChange={setAccuracy} />
+      <FbYesNo label="Would you buy this outfit?" value={wouldBuy} onChange={setWouldBuy} />
+
+      <div className="space-y-2.5">
+        <Label className="text-sm font-medium text-muted-foreground">Which size did you actually pick?</Label>
+        <div className="flex flex-wrap gap-2">
+          {SIZES.map((s) => (
+            <button key={s} type="button" onClick={() => setSelectedSize(s)}
+              className={cn(
+                "min-w-[44px] rounded-full border px-3.5 py-1.5 text-sm font-medium transition-all",
+                s === selectedSize
+                  ? "border-transparent gradient-primary text-white btn-glow"
+                  : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-foreground hover:border-white/25",
+              )}>
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2.5">
+        <div className="flex items-baseline justify-between">
+          <Label className="text-sm font-medium text-muted-foreground">Rate the fit</Label>
+          <span className="text-xs text-muted-foreground">{fitRating > 0 ? `${fitRating} / 5` : "Tap to rate"}</span>
+        </div>
+        <div className="flex gap-2">
+          {[1, 2, 3, 4, 5].map((n) => (
+            <button key={n} type="button" onClick={() => setFitRating(n)}
+              className={cn(
+                "h-11 flex-1 rounded-2xl border text-base font-semibold transition-all",
+                n <= fitRating
+                  ? "border-transparent gradient-primary text-white btn-glow"
+                  : "border-white/10 bg-white/[0.03] text-muted-foreground hover:border-white/25",
+              )}>
+              {n}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="space-y-2.5">
+        <Label className="text-sm font-medium text-muted-foreground">Anything else? <span className="text-muted-foreground/60">(optional)</span></Label>
+        <textarea
+          value={feedbackText}
+          onChange={(e) => setFeedbackText(e.target.value.slice(0, 1000))}
+          rows={3}
+          placeholder="Tell us what worked or what felt off…"
+          className="w-full resize-none rounded-2xl border border-white/10 bg-white/[0.03] px-4 py-3 text-sm placeholder:text-muted-foreground/60 focus:border-[var(--color-myntra-glow)]/60 focus:outline-none"
+        />
+        <div className="text-right text-[10px] text-muted-foreground/60">{feedbackText.length}/1000</div>
+      </div>
+
+      <Button onClick={handleSubmit} disabled={!canSubmit}
+        size="lg"
+        className="h-13 w-full rounded-full gradient-primary btn-glow text-base font-semibold disabled:opacity-50">
+        {submitting ? "Sending feedback…" : "Submit feedback"}
+        {!submitting && <ArrowRight className="ml-1 h-4 w-4" />}
+      </Button>
+    </div>
+  );
+}
+
+function FbYesNo({ label, value, onChange }: {
+  label: string; value: "yes" | "no" | null; onChange: (v: "yes" | "no") => void;
+}) {
+  return (
+    <div className="space-y-2.5">
+      <Label className="text-sm font-medium text-muted-foreground">{label}</Label>
+      <div className="flex gap-2">
+        {(["yes", "no"] as const).map((opt) => {
+          const active = value === opt;
+          return (
+            <button key={opt} type="button" onClick={() => onChange(opt)}
+              className={cn(
+                "flex-1 rounded-2xl border px-4 py-3 text-sm font-semibold capitalize transition-all",
+                active
+                  ? opt === "yes"
+                    ? "border-[var(--color-success)]/60 bg-[var(--color-success)]/15 text-[var(--color-success)]"
+                    : "border-[var(--color-destructive)]/60 bg-[var(--color-destructive)]/15 text-[var(--color-destructive)]"
+                  : "border-white/10 bg-white/[0.03] text-muted-foreground hover:text-foreground hover:border-white/25",
+              )}>
+              {opt}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
