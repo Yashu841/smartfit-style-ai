@@ -531,6 +531,128 @@ export function Mannequin(props: MannequinProps) {
   );
 }
 
+function GarmentLayer({
+  product, paths, fit, measurements, gradientId, shineId,
+}: {
+  product: Product;
+  paths: ReturnType<typeof generateGarmentPaths>;
+  fit: GarmentFit;
+  measurements: BodyMeasurements;
+  gradientId: string;
+  shineId: string;
+}) {
+  const outline = product.color === "#111114" || product.color === "#0d0d10" ? "white" : "black";
+  const outlineOpacity = product.color === "#111114" || product.color === "#0d0d10" ? 0.24 : 0.15;
+  const isDress = product.category === "Dress";
+  const isSkirt = product.category === "Skirt";
+  const isBottom = product.category === "Jeans" || product.category === "Trousers";
+  const isStructured = product.category === "Blazer" || product.category === "Jacket";
+  const isHoodie = product.category === "Hoodie";
+  const isSleeveless = product.silhouette === "midi-dress" || product.silhouette === "mini-dress" || product.silhouette === "maxi-dress";
+  const looseness = fit.drape / 20;
+
+  return (
+    <g className="animate-fade-in">
+      {(isDress || isSkirt) && (
+        <path
+          d={isDress ? paths.dress : paths.skirt}
+          fill={`url(#${gradientId})`}
+          stroke={outline}
+          strokeOpacity={outlineOpacity}
+          strokeWidth="1.2"
+        />
+      )}
+
+      {!isDress && !isSkirt && !isBottom && (
+        <>
+          <path d={paths.bodice} fill={`url(#${gradientId})`} stroke={outline} strokeOpacity={outlineOpacity} strokeWidth="1.2" />
+          <path d={paths.leftSleeve} fill={`url(#${gradientId})`} stroke={outline} strokeOpacity={outlineOpacity * 0.9} strokeWidth="1" />
+          <path d={paths.rightSleeve} fill={`url(#${gradientId})`} stroke={outline} strokeOpacity={outlineOpacity * 0.9} strokeWidth="1" />
+        </>
+      )}
+
+      {isDress && !isSleeveless && (
+        <>
+          <path d={paths.leftSleeve} fill={`url(#${gradientId})`} opacity="0.94" />
+          <path d={paths.rightSleeve} fill={`url(#${gradientId})`} opacity="0.94" />
+        </>
+      )}
+
+      {isBottom && (
+        <>
+          <path d={paths.leftPant} fill={`url(#${gradientId})`} stroke={outline} strokeOpacity={outlineOpacity} strokeWidth="1" />
+          <path d={paths.rightPant} fill={`url(#${gradientId})`} stroke={outline} strokeOpacity={outlineOpacity} strokeWidth="1" />
+          <path
+            d={`M ${measurements.cx - fit.hipW / 2} ${measurements.hipY - 10} C ${measurements.cx - fit.waistW / 2} ${measurements.waistY + 10}, ${measurements.cx + fit.waistW / 2} ${measurements.waistY + 10}, ${measurements.cx + fit.hipW / 2} ${measurements.hipY - 10} L ${measurements.cx + fit.hipW / 2 - 6} ${measurements.hipY + 10} C ${measurements.cx + fit.waistW / 2} ${measurements.hipY + 14}, ${measurements.cx - fit.waistW / 2} ${measurements.hipY + 14}, ${measurements.cx - fit.hipW / 2 + 6} ${measurements.hipY + 10} Z`}
+            fill={`url(#${gradientId})`}
+            opacity="0.98"
+          />
+        </>
+      )}
+
+      {isSkirt && (
+        <path
+          d={`M ${measurements.cx - fit.waistW / 2} ${measurements.waistY - 8} C ${measurements.cx - fit.waistW * 0.24} ${measurements.waistY + 3}, ${measurements.cx + fit.waistW * 0.24} ${measurements.waistY + 3}, ${measurements.cx + fit.waistW / 2} ${measurements.waistY - 8} L ${measurements.cx + fit.waistW / 2 + 4} ${measurements.waistY + 8} C ${measurements.cx + 18} ${measurements.waistY + 17}, ${measurements.cx - 18} ${measurements.waistY + 17}, ${measurements.cx - fit.waistW / 2 - 4} ${measurements.waistY + 8} Z`}
+          fill={`url(#${gradientId})`}
+        />
+      )}
+
+      {isStructured && (
+        <>
+          <path d={`M ${measurements.cx - 9} ${measurements.shoulderY + 22} L ${measurements.cx - fit.chestW * 0.28} ${measurements.waistY + 16} L ${measurements.cx - 2} ${measurements.waistY + 4} Z`} fill="black" opacity="0.25" />
+          <path d={`M ${measurements.cx + 9} ${measurements.shoulderY + 22} L ${measurements.cx + fit.chestW * 0.28} ${measurements.waistY + 16} L ${measurements.cx + 2} ${measurements.waistY + 4} Z`} fill="black" opacity="0.25" />
+        </>
+      )}
+
+      {isHoodie && (
+        <path
+          d={`M ${measurements.cx - 27} ${measurements.shoulderY + 12} C ${measurements.cx - 34} ${measurements.neckY + 14}, ${measurements.cx + 34} ${measurements.neckY + 14}, ${measurements.cx + 27} ${measurements.shoulderY + 12} C ${measurements.cx + 18} ${measurements.shoulderY + 34}, ${measurements.cx - 18} ${measurements.shoulderY + 34}, ${measurements.cx - 27} ${measurements.shoulderY + 12} Z`}
+          fill="black"
+          opacity="0.22"
+        />
+      )}
+
+      {isDress && product.silhouette === "maxi-dress" && (
+        <g opacity="0.42">
+          {[-0.32, -0.16, 0.02, 0.19, 0.35].map((n) => (
+            <path key={n} d={`M ${measurements.cx + fit.waistW * n} ${measurements.waistY + 8} C ${measurements.cx + fit.hemW * n * 0.8} ${measurements.hipY + 82}, ${measurements.cx + fit.hemW * n} ${measurements.ankleY - 26}, ${measurements.cx + fit.hemW * n * 0.94} ${measurements.ankleY + 4}`} stroke="white" strokeWidth="0.8" strokeOpacity="0.42" fill="none" />
+          ))}
+        </g>
+      )}
+
+      {product.silhouette === "wide-jeans" && (
+        <path d={`M ${measurements.cx} ${measurements.crotchY + 8} C ${measurements.cx - 3} ${measurements.kneeY}, ${measurements.cx - 2} ${measurements.ankleY - 12}, ${measurements.cx} ${measurements.ankleY + 2} M ${measurements.cx} ${measurements.crotchY + 8} C ${measurements.cx + 3} ${measurements.kneeY}, ${measurements.cx + 2} ${measurements.ankleY - 12}, ${measurements.cx} ${measurements.ankleY + 2}`} stroke="black" strokeWidth="1" strokeOpacity="0.18" fill="none" />
+      )}
+
+      <path
+        d={isDress ? paths.dress : isSkirt ? paths.skirt : isBottom ? `${paths.leftPant} ${paths.rightPant}` : paths.bodice}
+        fill={`url(#${shineId})`}
+        opacity="0.68"
+        style={{ mixBlendMode: product.color === "#f5e9d6" || product.color === "#f3f1ec" ? "multiply" : "screen" }}
+      />
+
+      <g opacity={fit.drape > 15 ? 0.5 : 0.3}>
+        <path d={`M ${measurements.cx - fit.chestW * 0.22} ${measurements.shoulderY + 28} C ${measurements.cx - fit.waistW * 0.18 - looseness * 4} ${measurements.waistY + 8}, ${measurements.cx - fit.hipW * 0.2 - looseness * 8} ${measurements.hipY + 36}, ${measurements.cx - fit.hipW * 0.18} ${measurements.hipY + 74}`} stroke="white" strokeWidth="0.9" strokeOpacity="0.5" fill="none" />
+        <path d={`M ${measurements.cx + fit.chestW * 0.18} ${measurements.shoulderY + 32} C ${measurements.cx + fit.waistW * 0.14 + looseness * 5} ${measurements.waistY + 14}, ${measurements.cx + fit.hipW * 0.16 + looseness * 8} ${measurements.hipY + 36}, ${measurements.cx + fit.hipW * 0.14} ${measurements.hipY + 82}`} stroke="black" strokeWidth="1" strokeOpacity="0.22" fill="none" />
+      </g>
+
+      {product.id === "mango-floral" && (
+        <g opacity="0.42">
+          {[
+            [measurements.cx - 24, measurements.bustY + 14], [measurements.cx + 22, measurements.waistY + 22],
+            [measurements.cx - 38, measurements.hipY + 52], [measurements.cx + 34, measurements.kneeY - 5],
+          ].map(([x, y]) => (
+            <g key={`${x}-${y}`}>
+              <circle cx={x} cy={y} r="4" fill={product.accent ?? "white"} />
+              <circle cx={x + 5} cy={y - 2} r="3" fill="white" opacity="0.7" />
+            </g>
+          ))}
+        </g>
+      )}
+    </g>
+  );
+}
+
 function AccessoryTag({
   className, label, name, brand, color,
 }: { className?: string; label: string; name: string; brand: string; color: string }) {
