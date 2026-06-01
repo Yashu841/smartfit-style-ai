@@ -790,10 +790,10 @@ function Results({
               Try another
             </Button>
           </div>
-
         </div>
       </div>
     </section>
+
   );
 }
 
