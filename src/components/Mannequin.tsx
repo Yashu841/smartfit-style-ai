@@ -301,6 +301,39 @@ function applyGarmentFit(product: Product, m: BodyMeasurements, fit: Fit): Garme
   };
 }
 
+function generateGarmentPaths(product: Product, m: BodyMeasurements, g: GarmentFit) {
+  const { cx } = m;
+  const shoulderY = m.shoulderY + (product.category === "Hoodie" ? 2 : 7);
+  const waistY = m.waistY + (product.category === "Hoodie" ? 20 : 4);
+  const hipY = m.hipY + (product.category === "Hoodie" ? 28 : 4);
+  const skirtHemY = product.silhouette === "mini-dress" || product.silhouette === "mini-skirt"
+    ? m.hipY + 64
+    : product.silhouette === "maxi-dress"
+      ? m.ankleY + 4
+      : m.kneeY + 32;
+
+  const bodice = `M ${cx - g.shoulderW / 2} ${shoulderY} C ${cx - g.chestW / 2 - 10} ${m.bustY - 16}, ${cx - g.chestW / 2} ${m.bustY + 12}, ${cx - g.waistW / 2} ${waistY} C ${cx - g.hipW / 2} ${hipY - 12}, ${cx - g.hipW / 2} ${hipY + 2}, ${cx - g.hipW / 2} ${hipY} L ${cx + g.hipW / 2} ${hipY} C ${cx + g.hipW / 2} ${hipY + 2}, ${cx + g.waistW / 2} ${waistY}, ${cx + g.waistW / 2} ${waistY} C ${cx + g.chestW / 2} ${m.bustY + 12}, ${cx + g.chestW / 2 + 10} ${m.bustY - 16}, ${cx + g.shoulderW / 2} ${shoulderY} C ${cx + 20} ${shoulderY - 10}, ${cx - 20} ${shoulderY - 10}, ${cx - g.shoulderW / 2} ${shoulderY} Z`;
+
+  const dress = `M ${cx - g.shoulderW * 0.43} ${shoulderY + 2} C ${cx - g.chestW / 2} ${m.bustY - 6}, ${cx - g.waistW / 2} ${waistY - 8}, ${cx - g.waistW / 2} ${waistY} C ${cx - g.hipW / 2 - 6} ${m.hipY + 14}, ${cx - g.hemW / 2 - g.drape * 0.25} ${skirtHemY - 28}, ${cx - g.hemW / 2} ${skirtHemY} C ${cx - g.hemW * 0.22} ${skirtHemY + 9}, ${cx + g.hemW * 0.22} ${skirtHemY + 9}, ${cx + g.hemW / 2} ${skirtHemY} C ${cx + g.hemW / 2 + g.drape * 0.25} ${skirtHemY - 28}, ${cx + g.hipW / 2 + 6} ${m.hipY + 14}, ${cx + g.waistW / 2} ${waistY} C ${cx + g.waistW / 2} ${waistY - 8}, ${cx + g.chestW / 2} ${m.bustY - 6}, ${cx + g.shoulderW * 0.43} ${shoulderY + 2} C ${cx + 18} ${shoulderY - 8}, ${cx - 18} ${shoulderY - 8}, ${cx - g.shoulderW * 0.43} ${shoulderY + 2} Z`;
+
+  const sleeve = (side: -1 | 1) => {
+    const x = (o: number) => cx + side * o;
+    const sleeveEnd = product.category === "T-Shirt" ? m.elbowY - 32 : product.category === "Top" ? m.elbowY - 18 : m.wristY - 12;
+    return `M ${x(g.shoulderW / 2 - 6)} ${shoulderY + 5} C ${x(g.shoulderW / 2 + g.sleeveW * 1.8)} ${shoulderY + 22}, ${x(g.shoulderW / 2 + g.sleeveW * 1.65)} ${sleeveEnd - 20}, ${x(g.shoulderW / 2 + g.sleeveW * 0.95)} ${sleeveEnd} L ${x(g.shoulderW / 2 - g.sleeveW * 0.2)} ${sleeveEnd - 5} C ${x(g.shoulderW / 2 - 12)} ${m.elbowY - 20}, ${x(g.shoulderW / 2 - 16)} ${shoulderY + 21}, ${x(g.shoulderW / 2 - 6)} ${shoulderY + 5} Z`;
+  };
+
+  const pantLeg = (side: -1 | 1) => {
+    const x = (o: number) => cx + side * o;
+    const outer = Math.max(g.thighW, 24);
+    const ankle = product.silhouette === "wide-jeans" || product.category === "Trousers" ? outer * 0.82 : outer * 0.52;
+    return `M ${x(8)} ${m.crotchY} C ${x(outer * 1.05)} ${m.crotchY + 38}, ${x(outer * 0.8)} ${m.kneeY}, ${x(ankle)} ${m.ankleY + 2} L ${x(-ankle * 0.45)} ${m.ankleY + 2} C ${x(-outer * 0.15)} ${m.kneeY}, ${x(m.hipW * 0.31)} ${m.hipY + 28}, ${x(8)} ${m.crotchY} Z`;
+  };
+
+  const skirt = `M ${cx - g.waistW / 2} ${waistY - 4} C ${cx - g.hipW / 2 - 4} ${m.hipY + 16}, ${cx - g.hemW / 2} ${skirtHemY - 10}, ${cx - g.hemW / 2} ${skirtHemY} C ${cx - g.hemW * 0.2} ${skirtHemY + 8}, ${cx + g.hemW * 0.2} ${skirtHemY + 8}, ${cx + g.hemW / 2} ${skirtHemY} C ${cx + g.hemW / 2} ${skirtHemY - 10}, ${cx + g.hipW / 2 + 4} ${m.hipY + 16}, ${cx + g.waistW / 2} ${waistY - 4} Z`;
+
+  return { bodice, dress, leftSleeve: sleeve(-1), rightSleeve: sleeve(1), leftPant: pantLeg(-1), rightPant: pantLeg(1), skirt };
+}
+
 export function Mannequin(props: MannequinProps) {
   const {
     height = 170, weight = 65, gender = "Female", bodyType = "Regular",
