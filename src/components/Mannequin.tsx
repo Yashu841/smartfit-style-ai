@@ -452,7 +452,7 @@ export function Mannequin(props: MannequinProps) {
               />
             )}
 
-            <g pointerEvents="none" opacity="0.34" mixBlendMode="screen">
+            <g pointerEvents="none" opacity="0.34" style={{ mixBlendMode: "screen" }}>
               <path d={`M ${measurements.cx - measurements.chestW * 0.18} ${measurements.shoulderY + 22} C ${measurements.cx - 4} ${measurements.waistY - 8}, ${measurements.cx - 7} ${measurements.hipY + 34}, ${measurements.cx - 4} ${measurements.kneeY}`} stroke="white" strokeWidth="1.2" fill="none" />
               <path d={`M ${measurements.cx + measurements.chestW * 0.2} ${measurements.shoulderY + 26} C ${measurements.cx + 8} ${measurements.waistY - 2}, ${measurements.cx + 10} ${measurements.hipY + 30}, ${measurements.cx + 6} ${measurements.kneeY}`} stroke="white" strokeWidth="0.8" fill="none" opacity="0.45" />
             </g>
