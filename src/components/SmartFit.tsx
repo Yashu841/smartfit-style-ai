@@ -22,6 +22,17 @@ import {
 } from "lucide-react";
 
 const WEBHOOK_URL = "https://hook.eu1.make.com/11jvi2slpo1x8f9ghdpqwymj4jgvebkh";
+const FEEDBACK_WEBHOOK_URL = "https://hook.eu1.make.com/11jvi2slpo1x8f9ghdpqwymj4jgvebkh";
+
+function getUserId(): string {
+  if (typeof window === "undefined") return "anon";
+  let id = localStorage.getItem("smartfit_user_id");
+  if (!id) {
+    id = `usr_${Math.random().toString(36).slice(2, 10)}${Date.now().toString(36)}`;
+    localStorage.setItem("smartfit_user_id", id);
+  }
+  return id;
+}
 
 type Step = "hero" | "form" | "processing" | "results";
 type Fit = "tight" | "perfect" | "relaxed" | "oversized";
