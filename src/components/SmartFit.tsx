@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 
 const WEBHOOK_URL = "https://hook.eu1.make.com/11jvi2slpo1x8f9ghdpqwymj4jgvebkh";
-const FEEDBACK_WEBHOOK_URL = "https://hook.eu1.make.com/11jvi2slpo1x8f9ghdpqwymj4jgvebkh";
+const FEEDBACK_WEBHOOK_URL = "https://hook.eu1.make.com/ypjab5k5fa7wnj8zar87i2jygt2piwmq";
 
 function getUserId(): string {
   if (typeof window === "undefined") return "anon";
@@ -926,14 +926,15 @@ function FeedbackSection({ productId, recommendedSize }: { productId: string; re
       submitted_at: new Date().toISOString(),
     };
     try {
-      const res = await fetch(FEEDBACK_WEBHOOK_URL, {
+      // Fire-and-forget: do not await response from feedback webhook
+      fetch(FEEDBACK_WEBHOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(`Webhook ${res.status}`);
+        keepalive: true,
+      }).catch((err) => console.error("Feedback webhook failed:", err));
       setSubmitted(true);
-      toast.success("Thanks! Your feedback helps SmartFit get smarter.");
+      toast.success("Feedback received. SmartFit AI just got smarter.");
     } catch (err) {
       console.error("Feedback webhook failed:", err);
       toast.error("Couldn't submit feedback — please try again.");
