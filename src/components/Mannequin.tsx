@@ -1,38 +1,11 @@
-import { useEffect, useId, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Canvas, useFrame } from "@react-three/fiber";
+import { ContactShadows, Environment, OrbitControls } from "@react-three/drei";
+import * as THREE from "three";
 import type { Product } from "@/lib/catalog";
-import zaraPinkDress from "@/assets/mannequin/zara-pink-dress.jpg";
-import hmBlackMini from "@/assets/mannequin/hm-black-mini.jpg";
-import mangoFloral from "@/assets/mannequin/mango-floral.jpg";
-import zaraSilkBlouse from "@/assets/mannequin/zara-silk-blouse.jpg";
-import mangoBlazer from "@/assets/mannequin/mango-blazer.jpg";
-import levisMom from "@/assets/mannequin/levis-mom.jpg";
-import hmMiniSkirt from "@/assets/mannequin/hm-mini-skirt.jpg";
-import roadsterTee from "@/assets/mannequin/roadster-tee.jpg";
-import zaraOxford from "@/assets/mannequin/zara-oxford.jpg";
-import hmBlazerM from "@/assets/mannequin/hm-blazer-m.jpg";
-import hrxHoodie from "@/assets/mannequin/hrx-hoodie.jpg";
-import levis501 from "@/assets/mannequin/levis-501.jpg";
-import zaraTrousers from "@/assets/mannequin/zara-trousers.jpg";
-import zaraBiker from "@/assets/mannequin/zara-biker.jpg";
-import accJacketCream from "@/assets/mannequin/acc-jacket-cream.jpg";
 
-export const OUTFIT_IMAGE_MAP: Record<string, string> = {
-  "zara-pink-dress": zaraPinkDress,
-  "hm-black-mini": hmBlackMini,
-  "mango-floral": mangoFloral,
-  "zara-silk-blouse": zaraSilkBlouse,
-  "mango-blazer": mangoBlazer,
-  "levis-mom": levisMom,
-  "hm-mini-skirt": hmMiniSkirt,
-  "roadster-tee": roadsterTee,
-  "zara-oxford": zaraOxford,
-  "hm-blazer-m": hmBlazerM,
-  "hrx-hoodie": hrxHoodie,
-  "levis-501": levis501,
-  "zara-trousers": zaraTrousers,
-  "zara-biker": zaraBiker,
-  "acc-jacket-cream": accJacketCream,
-};
+// Kept for backwards-compat with SmartFit.tsx import; no longer used by the 3D renderer.
+export const OUTFIT_IMAGE_MAP: Record<string, string> = {};
 
 type Fit = "tight" | "perfect" | "relaxed" | "oversized";
 type Gender = "Female" | "Male" | "Unisex";
@@ -53,618 +26,644 @@ export type MannequinProps = {
   showSkeleton?: boolean;
 };
 
-type BodyMeasurements = {
-  cx: number;
-  topY: number;
-  floorY: number;
-  headY: number;
-  headRx: number;
-  headRy: number;
-  neckY: number;
-  shoulderY: number;
-  bustY: number;
-  waistY: number;
-  hipY: number;
-  crotchY: number;
-  kneeY: number;
-  ankleY: number;
-  elbowY: number;
-  wristY: number;
-  shoulderW: number;
-  chestW: number;
-  waistW: number;
-  hipW: number;
-  thighW: number;
-  calfW: number;
-  armW: number;
-  footW: number;
-  posture: number;
-  depth: number;
+/* ──────────────── Parametric body math ──────────────── */
+
+type Shape = {
+  heightScale: number;     // overall vertical multiplier
+  shoulderW: number;       // shoulder width factor
+  chest: number;           // chest depth/width
+  bust: number;            // additional female bust
+  waist: number;           // waist radius factor
+  hip: number;             // hip radius factor
+  thigh: number;           // thigh radius factor
+  calf: number;            // calf radius factor
+  arm: number;             // upper arm radius
+  forearm: number;         // forearm radius
+  muscle: number;          // shoulder/biceps bulge
+  neck: number;            // neck radius
+  skin: string;
+  hair: string;
 };
 
-type SilhouettePaths = {
-  torso: string;
-  neck: string;
-  leftArm: string;
-  rightArm: string;
-  leftLeg: string;
-  rightLeg: string;
-};
+function computeShape(
+  height: number,
+  weight: number,
+  gender: Gender,
+  bodyType: BodyType,
+): Shape {
+  // Base heights ~170cm reference. Map 140-210 → 0.86-1.18
+  const heightScale = 0.86 + ((Math.max(140, Math.min(210, height)) - 140) / 70) * 0.32;
 
-type BodyScale = {
-  heightT: number;
-  massT: number;
-  heightScale: number;
-};
-
-const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-const normalize = (value: number, min: number, max: number) => clamp((value - min) / (max - min), 0, 1) * 2 - 1;
-const easeOutCubic = (t: number) => 1 - Math.pow(1 - t, 3);
-
-function calculateBodyScale(height: number, weight: number): BodyScale {
-  const heightT = normalize(height, 140, 210);
+  // Reference BMI corridor used to push waist/hip/thigh outward
   const bmi = weight / Math.pow(height / 100, 2);
-  const bmiMass = normalize(bmi, 17, 34);
-  const rawMass = normalize(weight, 40, 140);
-  const massT = clamp(bmiMass * 0.72 + rawMass * 0.28, -1, 1);
-  return { heightT, massT, heightScale: 1 + heightT * 0.16 };
-}
+  const fat = Math.max(-0.18, Math.min(0.55, (bmi - 22) / 14)); // -.18 thin → .55 heavy
 
-function calculateBodyMeasurements(height: number, weight: number, gender: Gender, bodyType: BodyType): BodyMeasurements {
-  const { heightT, massT, heightScale } = calculateBodyScale(height, weight);
-  const cx = 160;
-  const floorY = 522;
-  const bodyHeight = 418 * heightScale;
-  const topY = floorY - bodyHeight;
+  const isFemale = gender === "Female";
+  const isMale = gender === "Male";
 
-  const typeMods: Record<BodyType, Partial<Record<"shoulder" | "chest" | "waist" | "hip" | "thigh" | "arm" | "posture" | "limb", number>>> = {
-    Slim: { shoulder: -7, chest: -10, waist: -15, hip: -8, thigh: -6, arm: -4, posture: 1, limb: 6 },
-    Athletic: { shoulder: 16, chest: 11, waist: -7, hip: -1, thigh: 5, arm: 5, posture: 4, limb: 2 },
-    Regular: { shoulder: 0, chest: 0, waist: 0, hip: 0, thigh: 0, arm: 0, posture: 0, limb: 0 },
-    Curvy: { shoulder: 1, chest: 9, waist: -9, hip: 20, thigh: 8, arm: 2, posture: 1, limb: -1 },
-    Pear: { shoulder: -12, chest: -4, waist: -3, hip: 24, thigh: 10, arm: 1, posture: 0, limb: -1 },
-    Rectangle: { shoulder: 4, chest: 4, waist: 10, hip: 5, thigh: 2, arm: 1, posture: -1, limb: 0 },
-    Plus: { shoulder: 13, chest: 20, waist: 29, hip: 30, thigh: 16, arm: 9, posture: -2, limb: -4 },
+  // Body-type multipliers
+  const bt: Record<BodyType, Partial<Shape>> = {
+    Slim:      { shoulderW: 0.92, chest: 0.88, waist: 0.82, hip: 0.90, thigh: 0.86, arm: 0.84, muscle: -0.05 },
+    Athletic:  { shoulderW: 1.08, chest: 1.06, waist: 0.90, hip: 0.98, thigh: 1.04, arm: 1.08, muscle: 0.18 },
+    Regular:   { shoulderW: 1.00, chest: 1.00, waist: 1.00, hip: 1.00, thigh: 1.00, arm: 1.00, muscle: 0.04 },
+    Curvy:     { shoulderW: 0.98, chest: 1.04, waist: 0.94, hip: 1.18, thigh: 1.14, arm: 1.00, muscle: 0.02 },
+    Pear:      { shoulderW: 0.94, chest: 0.96, waist: 0.96, hip: 1.20, thigh: 1.20, arm: 0.96, muscle: 0.00 },
+    Rectangle: { shoulderW: 1.02, chest: 0.98, waist: 1.02, hip: 1.00, thigh: 0.98, arm: 1.00, muscle: 0.02 },
+    Plus:      { shoulderW: 1.08, chest: 1.20, waist: 1.30, hip: 1.26, thigh: 1.22, arm: 1.18, muscle: 0.05 },
   };
+  const m = bt[bodyType] ?? bt.Regular;
 
-  const genderMods = {
-    Female: { shoulder: -5, chest: 5, waist: -4, hip: 10, thigh: 3, arm: -1, posture: 1 },
-    Male: { shoulder: 17, chest: 12, waist: 7, hip: -6, thigh: 2, arm: 3, posture: 3 },
-    Unisex: { shoulder: 3, chest: 2, waist: 2, hip: 1, thigh: 1, arm: 1, posture: 1 },
-  }[gender];
-  const tm = typeMods[bodyType];
-
-  const add = (base: number, part: keyof typeof genderMods, massGain: number, min: number, max: number) =>
-    clamp(base + massT * massGain + (tm[part] ?? 0) + genderMods[part], min, max);
-
-  const shoulderW = add(92, "shoulder", 13, 66, 138);
-  const chestW = add(82, "chest", 19, 56, 132);
-  const waistW = add(58, "waist", 31, 42, 126);
-  const hipW = add(84, "hip", 27, 56, 146);
-  const thighW = add(29, "thigh", 12, 18, 54);
-  const armW = add(14, "arm", 6, 9, 30);
-  const limbBoost = tm.limb ?? 0;
-
-  const headY = topY + 24;
-  const neckY = topY + 56;
-  const shoulderY = topY + 84 + heightT * 3;
-  const bustY = shoulderY + 34;
-  const waistY = shoulderY + 86 + heightT * 13;
-  const hipY = waistY + 58 + heightT * 7;
-  const crotchY = hipY + 22;
-  const ankleY = floorY - 18;
-  const kneeY = crotchY + (ankleY - crotchY) * 0.53;
-  const elbowY = shoulderY + 88 + heightT * 10 + limbBoost;
-  const wristY = clamp(shoulderY + 188 + heightT * 24 + limbBoost * 1.7, hipY + 36, ankleY - 64);
+  const shoulderW = (m.shoulderW ?? 1) * (isMale ? 1.10 : 0.96) + fat * 0.05;
+  const chest     = (m.chest ?? 1) * (isMale ? 1.06 : 0.96) + fat * 0.18;
+  const bust      = isFemale ? 0.10 + (bodyType === "Curvy" ? 0.06 : bodyType === "Plus" ? 0.08 : 0) : 0;
+  const waist     = (m.waist ?? 1) * (isFemale ? 0.86 : 1.0) + fat * 0.45;
+  const hip       = (m.hip ?? 1) * (isFemale ? 1.08 : 0.98) + fat * 0.28;
+  const thigh     = (m.thigh ?? 1) + fat * 0.30;
+  const calf      = 0.95 + fat * 0.15 + (m.muscle ?? 0) * 0.4;
+  const arm       = (m.arm ?? 1) * (isMale ? 1.08 : 0.94) + fat * 0.20 + (m.muscle ?? 0) * 0.3;
+  const forearm   = arm * 0.86;
+  const muscle    = m.muscle ?? 0;
+  const neck      = 0.92 + (isMale ? 0.08 : 0) + fat * 0.15;
 
   return {
-    cx,
-    topY,
-    floorY,
-    headY,
-    headRx: clamp(19 + massT * 2.2 + (gender === "Male" ? 1.5 : 0), 17, 24),
-    headRy: clamp(25 + heightT * 1.5 + massT * 1.2, 22, 29),
-    neckY,
-    shoulderY,
-    bustY,
-    waistY,
-    hipY,
-    crotchY,
-    kneeY,
-    ankleY,
-    elbowY,
-    wristY,
-    shoulderW,
-    chestW,
-    waistW,
-    hipW,
-    thighW,
-    calfW: clamp(18 + massT * 6 + (tm.thigh ?? 0) * 0.24, 12, 32),
-    armW,
-    footW: clamp(22 + heightT * 2.5 + massT * 1.5, 18, 28),
-    posture: (tm.posture ?? 0) + genderMods.posture,
-    depth: clamp(0.9 + massT * 0.24 + (bodyType === "Plus" ? 0.14 : 0), 0.72, 1.35),
+    heightScale,
+    shoulderW, chest, bust, waist, hip, thigh, calf, arm, forearm, muscle, neck,
+    skin: isMale ? "#d8a98a" : "#e7c4ad",
+    hair: isMale ? "#221a16" : "#2b1d1a",
   };
 }
 
-function interpolateMeasurements(from: BodyMeasurements, to: BodyMeasurements, progress: number): BodyMeasurements {
-  const next = {} as BodyMeasurements;
-  (Object.keys(to) as Array<keyof BodyMeasurements>).forEach((key) => {
-    next[key] = from[key] + (to[key] - from[key]) * progress;
-  });
-  return next;
-}
+/* ──────────────── Smoothing hook ──────────────── */
 
-function useInterpolatedMeasurements(target: BodyMeasurements) {
-  const [current, setCurrent] = useState(target);
-
-  useEffect(() => {
-    const start = current;
-    const startedAt = performance.now();
-    const duration = 320;
-    let frame = 0;
-
-    const tick = (now: number) => {
-      const progress = easeOutCubic(clamp((now - startedAt) / duration, 0, 1));
-      setCurrent(interpolateMeasurements(start, target, progress));
-      if (progress < 1) frame = requestAnimationFrame(tick);
+function useSmoothShape(target: Shape): Shape {
+  const [s, setS] = useState(target);
+  const ref = useRef(target);
+  useEffect(() => { ref.current = target; }, [target]);
+  useFrame((_, dt) => {
+    const cur = s;
+    const tgt = ref.current;
+    const k = Math.min(1, dt * 6);
+    const lerp = (a: number, b: number) => a + (b - a) * k;
+    const next: Shape = {
+      heightScale: lerp(cur.heightScale, tgt.heightScale),
+      shoulderW: lerp(cur.shoulderW, tgt.shoulderW),
+      chest: lerp(cur.chest, tgt.chest),
+      bust: lerp(cur.bust, tgt.bust),
+      waist: lerp(cur.waist, tgt.waist),
+      hip: lerp(cur.hip, tgt.hip),
+      thigh: lerp(cur.thigh, tgt.thigh),
+      calf: lerp(cur.calf, tgt.calf),
+      arm: lerp(cur.arm, tgt.arm),
+      forearm: lerp(cur.forearm, tgt.forearm),
+      muscle: lerp(cur.muscle, tgt.muscle),
+      neck: lerp(cur.neck, tgt.neck),
+      skin: tgt.skin,
+      hair: tgt.hair,
     };
-
-    frame = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(frame);
-  }, [target]);
-
-  return current;
+    // Only setState when meaningful change to avoid render thrash
+    if (Math.abs(next.heightScale - cur.heightScale) > 0.0005 ||
+        Math.abs(next.waist - cur.waist) > 0.002 ||
+        Math.abs(next.hip - cur.hip) > 0.002 ||
+        next.skin !== cur.skin || next.hair !== cur.hair) {
+      setS(next);
+    }
+  });
+  return s;
 }
 
-function generateSilhouette(m: BodyMeasurements): SilhouettePaths {
-  const { cx } = m;
-  const torso = [
-    `M ${cx - m.shoulderW / 2 + m.posture * 0.25} ${m.shoulderY}`,
-    `C ${cx - m.chestW / 2 - 10} ${m.bustY - 18}, ${cx - m.chestW / 2} ${m.bustY + 4}, ${cx - m.chestW / 2} ${m.bustY}`,
-    `C ${cx - m.waistW / 2 - 7} ${m.waistY - 26}, ${cx - m.waistW / 2} ${m.waistY - 4}, ${cx - m.waistW / 2} ${m.waistY}`,
-    `C ${cx - m.hipW / 2 - 4} ${m.hipY - 18}, ${cx - m.hipW / 2} ${m.hipY - 2}, ${cx - m.hipW / 2} ${m.hipY}`,
-    `C ${cx - m.hipW * 0.36} ${m.hipY + 16}, ${cx - 18} ${m.crotchY - 5}, ${cx - 10} ${m.crotchY}`,
-    `L ${cx + 10} ${m.crotchY}`,
-    `C ${cx + 18} ${m.crotchY - 5}, ${cx + m.hipW * 0.36} ${m.hipY + 16}, ${cx + m.hipW / 2} ${m.hipY}`,
-    `C ${cx + m.hipW / 2} ${m.hipY - 2}, ${cx + m.waistW / 2} ${m.waistY - 4}, ${cx + m.waistW / 2} ${m.waistY}`,
-    `C ${cx + m.waistW / 2 + 7} ${m.waistY - 26}, ${cx + m.chestW / 2} ${m.bustY + 4}, ${cx + m.chestW / 2} ${m.bustY}`,
-    `C ${cx + m.chestW / 2 + 10} ${m.bustY - 18}, ${cx + m.shoulderW / 2 + m.posture * 0.25} ${m.shoulderY}, ${cx + m.shoulderW / 2 + m.posture * 0.25} ${m.shoulderY}`,
-    `C ${cx + 24} ${m.shoulderY - 11}, ${cx - 24} ${m.shoulderY - 11}, ${cx - m.shoulderW / 2 + m.posture * 0.25} ${m.shoulderY}`,
-    "Z",
-  ].join(" ");
+/* ──────────────── Garment classification ──────────────── */
 
-  const neck = `M ${cx - 15} ${m.neckY + 1} C ${cx - 12} ${m.shoulderY - 20}, ${cx + 12} ${m.shoulderY - 20}, ${cx + 15} ${m.neckY + 1} L ${cx + 21} ${m.shoulderY + 8} C ${cx + 8} ${m.shoulderY + 16}, ${cx - 8} ${m.shoulderY + 16}, ${cx - 21} ${m.shoulderY + 8} Z`;
-
-  return {
-    torso,
-    neck,
-    leftArm: armPath(m, -1),
-    rightArm: armPath(m, 1),
-    leftLeg: legPath(m, -1),
-    rightLeg: legPath(m, 1),
-  };
-}
-
-function armPath(m: BodyMeasurements, side: -1 | 1) {
-  const x = (offset: number) => m.cx + side * offset;
-  const s = side;
-  return [
-    `M ${x(m.shoulderW / 2 - 8)} ${m.shoulderY + 7}`,
-    `C ${x(m.shoulderW / 2 + m.armW * 1.7)} ${m.shoulderY + 28}, ${x(m.shoulderW / 2 + m.armW * 1.95)} ${m.elbowY - 14}, ${x(m.shoulderW / 2 + m.armW * 1.15)} ${m.elbowY}`,
-    `C ${x(m.hipW / 2 + m.armW * 0.95)} ${m.wristY - 28}, ${x(m.hipW / 2 + m.armW * 0.65)} ${m.wristY - 8}, ${x(m.hipW / 2 + m.armW * 0.55)} ${m.wristY}`,
-    `C ${x(m.hipW / 2 + 2)} ${m.wristY + 10}, ${x(m.hipW / 2 - m.armW * 0.22)} ${m.wristY + 3}, ${x(m.hipW / 2 - m.armW * 0.16)} ${m.wristY - 7}`,
-    `C ${x(m.shoulderW / 2 - m.armW * 0.12)} ${m.elbowY - 4}, ${x(m.shoulderW / 2 - 18)} ${m.shoulderY + 22}, ${x(m.shoulderW / 2 - 8)} ${m.shoulderY + 7}`,
-    "Z",
-  ].join(" ").replaceAll("-0", "0").replaceAll(`${s * 0}`, "0");
-}
-
-function legPath(m: BodyMeasurements, side: -1 | 1) {
-  const x = (offset: number) => m.cx + side * offset;
-  return [
-    `M ${x(9)} ${m.crotchY - 1}`,
-    `C ${x(12)} ${m.crotchY + 30}, ${x(m.calfW * 0.35)} ${m.kneeY - 4}, ${x(7)} ${m.ankleY}`,
-    `L ${x(m.footW)} ${m.ankleY + 8}`,
-    `C ${x(m.footW * 0.2)} ${m.ankleY + 14}, ${x(-m.footW * 0.18)} ${m.ankleY + 11}, ${x(-3)} ${m.ankleY}`,
-    `C ${x(-m.thighW * 0.16)} ${m.kneeY - 8}, ${x(m.hipW * 0.34)} ${m.hipY + 34}, ${x(m.hipW * 0.34)} ${m.hipY + 12}`,
-    `C ${x(m.hipW * 0.27)} ${m.hipY + 26}, ${x(18)} ${m.crotchY - 7}, ${x(9)} ${m.crotchY - 1}`,
-    "Z",
-  ].join(" ");
-}
-
-type GarmentFit = {
-  shoulderW: number;
-  chestW: number;
-  waistW: number;
-  hipW: number;
-  sleeveW: number;
-  thighW: number;
-  hemW: number;
-  drape: number;
+type GarmentPlan = {
+  top?: { color: string; accent?: string; sleeves: "none" | "short" | "long"; length: "crop" | "regular" | "long" };
+  bottom?: { color: string; accent?: string; length: "shorts" | "mini" | "knee" | "long"; kind: "pants" | "skirt" };
+  dress?: { color: string; accent?: string; length: "mini" | "midi" | "maxi" };
+  outerwear?: { color: string };
+  shoes?: { color: string; kind: "heel" | "sneaker" | "boot" | "flat" };
 };
 
-function applyGarmentFit(product: Product, m: BodyMeasurements, fit: Fit): GarmentFit {
-  const ease = fit === "tight" ? -5 : fit === "perfect" ? 3 : fit === "relaxed" ? 13 : 24;
-  const structure = ["Blazer", "Jacket", "Hoodie"].includes(product.category) ? 1.3 : 1;
-  const slimContour = fit === "tight" ? 0.96 : 1;
-  const drape = (fit === "oversized" ? 20 : fit === "relaxed" ? 12 : fit === "tight" ? -3 : 5) + m.depth * 6;
-
-  return {
-    shoulderW: Math.max(54, m.shoulderW + ease * structure + (product.category === "Blazer" || product.category === "Jacket" ? 12 : 0)),
-    chestW: Math.max(48, (m.chestW + ease * 1.15) * slimContour),
-    waistW: Math.max(38, (m.waistW + ease * 0.9 + (fit === "oversized" ? 8 : 0)) * slimContour),
-    hipW: Math.max(50, m.hipW + ease * 1.05 + (["Dress", "Skirt", "Hoodie", "Blazer", "Jacket"].includes(product.category) ? 8 : 0)),
-    sleeveW: Math.max(10, m.armW + ease * 0.45 + (product.category === "Hoodie" ? 7 : product.category === "Blazer" || product.category === "Jacket" ? 4 : 0)),
-    thighW: Math.max(18, m.thighW + ease * 0.45 + (product.silhouette === "wide-jeans" ? 8 : 0)),
-    hemW: Math.max(58, m.hipW + ease + drape),
-    drape,
-  };
+function planFromProduct(p?: Product | null, footwear?: Product | null): GarmentPlan {
+  const plan: GarmentPlan = {};
+  if (footwear) {
+    plan.shoes = {
+      color: footwear.color,
+      kind: footwear.silhouette === "heel" ? "heel"
+          : footwear.silhouette === "boot" ? "boot"
+          : footwear.silhouette === "sneaker" ? "sneaker" : "flat",
+    };
+  }
+  if (!p) return plan;
+  const sil = p.silhouette;
+  if (sil === "midi-dress")      plan.dress = { color: p.color, accent: p.accent, length: "midi" };
+  else if (sil === "mini-dress") plan.dress = { color: p.color, accent: p.accent, length: "mini" };
+  else if (sil === "maxi-dress") plan.dress = { color: p.color, accent: p.accent, length: "maxi" };
+  else if (sil === "blouse")     plan.top = { color: p.color, sleeves: "long", length: "regular" };
+  else if (sil === "shirt")      plan.top = { color: p.color, sleeves: "long", length: "regular" };
+  else if (sil === "tshirt")     plan.top = { color: p.color, sleeves: "short", length: "regular" };
+  else if (sil === "hoodie")     plan.top = { color: p.color, accent: p.accent, sleeves: "long", length: "regular" };
+  else if (sil === "blazer")     { plan.top = { color: "#e9e3d6", sleeves: "long", length: "regular" }; plan.outerwear = { color: p.color }; }
+  else if (sil === "biker-jacket") { plan.top = { color: "#1a1a1f", sleeves: "short", length: "regular" }; plan.outerwear = { color: p.color }; }
+  else if (sil === "skinny-jeans") plan.bottom = { color: p.color, length: "long", kind: "pants" };
+  else if (sil === "wide-jeans")   plan.bottom = { color: p.color, length: "long", kind: "pants" };
+  else if (sil === "trousers")     plan.bottom = { color: p.color, length: "long", kind: "pants" };
+  else if (sil === "mini-skirt")   plan.bottom = { color: p.color, length: "mini", kind: "skirt" };
+  return plan;
 }
 
-function generateGarmentPaths(product: Product, m: BodyMeasurements, g: GarmentFit) {
-  const { cx } = m;
-  const shoulderY = m.shoulderY + (product.category === "Hoodie" ? 2 : 7);
-  const waistY = m.waistY + (product.category === "Hoodie" ? 20 : 4);
-  const hipY = m.hipY + (product.category === "Hoodie" ? 28 : 4);
-  const skirtHemY = product.silhouette === "mini-dress" || product.silhouette === "mini-skirt"
-    ? m.hipY + 64
-    : product.silhouette === "maxi-dress"
-      ? m.ankleY + 4
-      : m.kneeY + 32;
-
-  const bodice = `M ${cx - g.shoulderW / 2} ${shoulderY} C ${cx - g.chestW / 2 - 10} ${m.bustY - 16}, ${cx - g.chestW / 2} ${m.bustY + 12}, ${cx - g.waistW / 2} ${waistY} C ${cx - g.hipW / 2} ${hipY - 12}, ${cx - g.hipW / 2} ${hipY + 2}, ${cx - g.hipW / 2} ${hipY} L ${cx + g.hipW / 2} ${hipY} C ${cx + g.hipW / 2} ${hipY + 2}, ${cx + g.waistW / 2} ${waistY}, ${cx + g.waistW / 2} ${waistY} C ${cx + g.chestW / 2} ${m.bustY + 12}, ${cx + g.chestW / 2 + 10} ${m.bustY - 16}, ${cx + g.shoulderW / 2} ${shoulderY} C ${cx + 20} ${shoulderY - 10}, ${cx - 20} ${shoulderY - 10}, ${cx - g.shoulderW / 2} ${shoulderY} Z`;
-
-  const dress = `M ${cx - g.shoulderW * 0.43} ${shoulderY + 2} C ${cx - g.chestW / 2} ${m.bustY - 6}, ${cx - g.waistW / 2} ${waistY - 8}, ${cx - g.waistW / 2} ${waistY} C ${cx - g.hipW / 2 - 6} ${m.hipY + 14}, ${cx - g.hemW / 2 - g.drape * 0.25} ${skirtHemY - 28}, ${cx - g.hemW / 2} ${skirtHemY} C ${cx - g.hemW * 0.22} ${skirtHemY + 9}, ${cx + g.hemW * 0.22} ${skirtHemY + 9}, ${cx + g.hemW / 2} ${skirtHemY} C ${cx + g.hemW / 2 + g.drape * 0.25} ${skirtHemY - 28}, ${cx + g.hipW / 2 + 6} ${m.hipY + 14}, ${cx + g.waistW / 2} ${waistY} C ${cx + g.waistW / 2} ${waistY - 8}, ${cx + g.chestW / 2} ${m.bustY - 6}, ${cx + g.shoulderW * 0.43} ${shoulderY + 2} C ${cx + 18} ${shoulderY - 8}, ${cx - 18} ${shoulderY - 8}, ${cx - g.shoulderW * 0.43} ${shoulderY + 2} Z`;
-
-  const sleeve = (side: -1 | 1) => {
-    const x = (o: number) => cx + side * o;
-    const sleeveEnd = product.category === "T-Shirt" ? m.elbowY - 32 : product.category === "Top" ? m.elbowY - 18 : m.wristY - 12;
-    return `M ${x(g.shoulderW / 2 - 6)} ${shoulderY + 5} C ${x(g.shoulderW / 2 + g.sleeveW * 1.8)} ${shoulderY + 22}, ${x(g.shoulderW / 2 + g.sleeveW * 1.65)} ${sleeveEnd - 20}, ${x(g.shoulderW / 2 + g.sleeveW * 0.95)} ${sleeveEnd} L ${x(g.shoulderW / 2 - g.sleeveW * 0.2)} ${sleeveEnd - 5} C ${x(g.shoulderW / 2 - 12)} ${m.elbowY - 20}, ${x(g.shoulderW / 2 - 16)} ${shoulderY + 21}, ${x(g.shoulderW / 2 - 6)} ${shoulderY + 5} Z`;
-  };
-
-  const pantLeg = (side: -1 | 1) => {
-    const x = (o: number) => cx + side * o;
-    const outer = Math.max(g.thighW, 24);
-    const ankle = product.silhouette === "wide-jeans" || product.category === "Trousers" ? outer * 0.82 : outer * 0.52;
-    return `M ${x(8)} ${m.crotchY} C ${x(outer * 1.05)} ${m.crotchY + 38}, ${x(outer * 0.8)} ${m.kneeY}, ${x(ankle)} ${m.ankleY + 2} L ${x(-ankle * 0.45)} ${m.ankleY + 2} C ${x(-outer * 0.15)} ${m.kneeY}, ${x(m.hipW * 0.31)} ${m.hipY + 28}, ${x(8)} ${m.crotchY} Z`;
-  };
-
-  const skirt = `M ${cx - g.waistW / 2} ${waistY - 4} C ${cx - g.hipW / 2 - 4} ${m.hipY + 16}, ${cx - g.hemW / 2} ${skirtHemY - 10}, ${cx - g.hemW / 2} ${skirtHemY} C ${cx - g.hemW * 0.2} ${skirtHemY + 8}, ${cx + g.hemW * 0.2} ${skirtHemY + 8}, ${cx + g.hemW / 2} ${skirtHemY} C ${cx + g.hemW / 2} ${skirtHemY - 10}, ${cx + g.hipW / 2 + 4} ${m.hipY + 16}, ${cx + g.waistW / 2} ${waistY - 4} Z`;
-
-  return { bodice, dress, leftSleeve: sleeve(-1), rightSleeve: sleeve(1), leftPant: pantLeg(-1), rightPant: pantLeg(1), skirt };
+function fitOffset(fit: Fit): number {
+  return fit === "tight" ? -0.012 : fit === "perfect" ? 0.012 : fit === "relaxed" ? 0.035 : 0.06;
 }
 
-export function Mannequin(props: MannequinProps) {
-  const {
-    height = 170, weight = 65, gender = "Female", bodyType = "Regular",
-    fit = "perfect", rotation = 0, scanning = false,
-    product = null, footwear = null, bag = null, accessory = null,
-    showSkeleton = false,
-  } = props;
+/* ──────────────── Human (R3F) ──────────────── */
 
-  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, "");
-  const targetMeasurements = useMemo(
-    () => calculateBodyMeasurements(height, weight, gender, bodyType),
+function Human({
+  shape, plan, fit, gender,
+}: { shape: Shape; plan: GarmentPlan; fit: Fit; gender: Gender }) {
+  const s = useSmoothShape(shape);
+  const group = useRef<THREE.Group>(null);
+  // Subtle breathing
+  useFrame((state) => {
+    if (!group.current) return;
+    const t = state.clock.elapsedTime;
+    group.current.position.y = Math.sin(t * 0.9) * 0.005;
+  });
+
+  const skinMat = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: s.skin, roughness: 0.55, metalness: 0.02 }),
+    [s.skin],
+  );
+  useEffect(() => { skinMat.color.set(s.skin); }, [s.skin, skinMat]);
+
+  const hairMat = useMemo(
+    () => new THREE.MeshStandardMaterial({ color: s.hair, roughness: 0.4, metalness: 0.1 }),
+    [s.hair],
+  );
+
+  const fo = fitOffset(fit);
+  const garment = (color: string, roughness = 0.6) =>
+    new THREE.MeshStandardMaterial({ color, roughness, metalness: 0.05 });
+
+  // Reference vertical landmarks (in world units), then scaled by heightScale
+  const H = s.heightScale;
+  const head = { r: 0.13, y: 1.62 };
+  const neck = { r: 0.055 * s.neck, y: 1.46, h: 0.10 };
+  const shoulder = { y: 1.40, x: 0.20 * s.shoulderW };
+  const torsoTop = 1.40;
+  const torsoMid = 1.18;
+  const waistY = 1.05;
+  const hipY = 0.96;
+  const kneeY = 0.50;
+  const ankleY = 0.05;
+
+  // Sleeves / outerwear
+  const top = plan.top;
+  const dress = plan.dress;
+  const outer = plan.outerwear;
+  const bottom = plan.bottom;
+  const shoes = plan.shoes;
+
+  return (
+    <group ref={group} scale={[1, H, 1]} position={[0, -0.8 * H, 0]}>
+      {/* HEAD */}
+      <mesh position={[0, head.y, 0]} castShadow material={skinMat}>
+        <sphereGeometry args={[head.r, 48, 48]} />
+      </mesh>
+      {/* Subtle jaw shaping */}
+      <mesh position={[0, head.y - 0.06, 0.005]} scale={[0.88, 0.7, 0.88]} material={skinMat}>
+        <sphereGeometry args={[head.r, 32, 32]} />
+      </mesh>
+      {/* Eyes */}
+      <mesh position={[-0.045, head.y + 0.015, 0.115]}>
+        <sphereGeometry args={[0.015, 16, 16]} />
+        <meshStandardMaterial color="#1a1a22" roughness={0.2} />
+      </mesh>
+      <mesh position={[0.045, head.y + 0.015, 0.115]}>
+        <sphereGeometry args={[0.015, 16, 16]} />
+        <meshStandardMaterial color="#1a1a22" roughness={0.2} />
+      </mesh>
+      {/* Lips */}
+      <mesh position={[0, head.y - 0.055, 0.118]} scale={[1, 0.35, 0.6]}>
+        <sphereGeometry args={[0.025, 16, 16]} />
+        <meshStandardMaterial color={gender === "Female" ? "#a8455a" : "#8a4a44"} roughness={0.5} />
+      </mesh>
+      {/* HAIR */}
+      <mesh
+        position={[0, head.y + (gender === "Female" ? 0.02 : 0.025), gender === "Female" ? -0.01 : 0]}
+        scale={gender === "Female"
+          ? [1.18, 1.35, 1.22]
+          : [1.05, 0.7, 1.05]}
+        material={hairMat}
+      >
+        <sphereGeometry args={[head.r, 32, 32]} />
+      </mesh>
+      {gender === "Female" && (
+        // long hair down the back
+        <mesh position={[0, head.y - 0.20, -0.08]} scale={[1.0, 2.2, 0.45]} material={hairMat}>
+          <sphereGeometry args={[head.r * 0.95, 24, 24]} />
+        </mesh>
+      )}
+
+      {/* NECK */}
+      <mesh position={[0, neck.y, 0]} material={skinMat}>
+        <cylinderGeometry args={[neck.r, neck.r * 1.1, neck.h, 24]} />
+      </mesh>
+
+      {/* SHOULDERS */}
+      <mesh position={[-shoulder.x, shoulder.y, 0]} material={skinMat}>
+        <sphereGeometry args={[0.075 + s.muscle * 0.02, 24, 24]} />
+      </mesh>
+      <mesh position={[shoulder.x, shoulder.y, 0]} material={skinMat}>
+        <sphereGeometry args={[0.075 + s.muscle * 0.02, 24, 24]} />
+      </mesh>
+
+      {/* TORSO — chest */}
+      <mesh position={[0, (torsoTop + torsoMid) / 2, 0]} scale={[s.chest, 1, s.chest * 0.7]} material={skinMat}>
+        <cylinderGeometry args={[0.18, 0.16, torsoTop - torsoMid + 0.05, 32]} />
+      </mesh>
+      {/* Bust (female) */}
+      {gender === "Female" && (
+        <>
+          <mesh position={[-0.07, torsoMid + 0.05, 0.10 * s.chest]} material={skinMat}>
+            <sphereGeometry args={[0.07 + s.bust * 0.35, 24, 24]} />
+          </mesh>
+          <mesh position={[0.07, torsoMid + 0.05, 0.10 * s.chest]} material={skinMat}>
+            <sphereGeometry args={[0.07 + s.bust * 0.35, 24, 24]} />
+          </mesh>
+        </>
+      )}
+      {/* Waist */}
+      <mesh position={[0, waistY, 0]} scale={[s.waist, 1, s.waist * 0.78]} material={skinMat}>
+        <cylinderGeometry args={[0.14, 0.16, 0.16, 32]} />
+      </mesh>
+      {/* Hips */}
+      <mesh position={[0, hipY - 0.04, 0]} scale={[s.hip, 1, s.hip * 0.82]} material={skinMat}>
+        <cylinderGeometry args={[0.17, 0.15, 0.18, 32]} />
+      </mesh>
+
+      {/* ARMS */}
+      <Arm side={-1} shoulder={shoulder} skin={skinMat} s={s} sleeves={top?.sleeves ?? dress?.length ? "short" : "none"} />
+      <Arm side={1}  shoulder={shoulder} skin={skinMat} s={s} sleeves={top?.sleeves ?? dress?.length ? "short" : "none"} />
+
+      {/* LEGS */}
+      <Leg side={-1} hipY={hipY} kneeY={kneeY} ankleY={ankleY} skin={skinMat} s={s} />
+      <Leg side={1}  hipY={hipY} kneeY={kneeY} ankleY={ankleY} skin={skinMat} s={s} />
+
+      {/* FEET / SHOES */}
+      <Foot side={-1} ankleY={ankleY} skin={skinMat} shoe={shoes} />
+      <Foot side={1}  ankleY={ankleY} skin={skinMat} shoe={shoes} />
+
+      {/* ───── GARMENTS ───── */}
+      {dress && (
+        <Dress
+          color={dress.color}
+          accent={dress.accent}
+          length={dress.length}
+          torsoMid={torsoMid}
+          waistY={waistY}
+          hipY={hipY}
+          s={s}
+          fo={fo}
+          gender={gender}
+        />
+      )}
+      {top && !dress && (
+        <Top color={top.color} sleeves={top.sleeves} length={top.length} torsoTop={torsoTop} torsoMid={torsoMid} waistY={waistY} hipY={hipY} s={s} fo={fo} gender={gender} />
+      )}
+      {bottom && !dress && (
+        <Bottom color={bottom.color} kind={bottom.kind} length={bottom.length} hipY={hipY} kneeY={kneeY} ankleY={ankleY} s={s} fo={fo} />
+      )}
+      {outer && !dress && (
+        <Outer color={outer.color} torsoTop={torsoTop} waistY={waistY} s={s} fo={fo} />
+      )}
+    </group>
+  );
+}
+
+function Arm({
+  side, shoulder, skin, s, sleeves,
+}: {
+  side: 1 | -1;
+  shoulder: { y: number; x: number };
+  skin: THREE.Material;
+  s: Shape;
+  sleeves: "none" | "short" | "long";
+}) {
+  const armLen = 0.36;
+  const forearmLen = 0.34;
+  const upperY = shoulder.y - armLen / 2 - 0.02;
+  const elbowY = shoulder.y - armLen - 0.04;
+  const foreY  = elbowY - forearmLen / 2;
+  const handY  = elbowY - forearmLen;
+  return (
+    <group>
+      {/* Upper arm */}
+      <mesh position={[side * (shoulder.x + 0.02), upperY, 0]} rotation={[0, 0, side * -0.05]} material={skin}>
+        <cylinderGeometry args={[0.045 * s.arm, 0.04 * s.arm, armLen, 20]} />
+      </mesh>
+      {/* Elbow */}
+      <mesh position={[side * (shoulder.x + 0.04), elbowY, 0]} material={skin}>
+        <sphereGeometry args={[0.04 * s.arm, 16, 16]} />
+      </mesh>
+      {/* Forearm */}
+      <mesh position={[side * (shoulder.x + 0.05), foreY, 0]} rotation={[0, 0, side * -0.03]} material={skin}>
+        <cylinderGeometry args={[0.038 * s.forearm, 0.034 * s.forearm, forearmLen, 20]} />
+      </mesh>
+      {/* Hand */}
+      <mesh position={[side * (shoulder.x + 0.06), handY - 0.02, 0]} material={skin}>
+        <boxGeometry args={[0.05, 0.10, 0.035]} />
+      </mesh>
+    </group>
+  );
+}
+
+function Leg({
+  side, hipY, kneeY, ankleY, skin, s,
+}: {
+  side: 1 | -1;
+  hipY: number; kneeY: number; ankleY: number;
+  skin: THREE.Material;
+  s: Shape;
+}) {
+  const x = side * 0.08 * s.hip;
+  const thighLen = hipY - kneeY;
+  const calfLen = kneeY - ankleY;
+  return (
+    <group>
+      {/* Thigh */}
+      <mesh position={[x, (hipY + kneeY) / 2, 0]} material={skin}>
+        <cylinderGeometry args={[0.085 * s.thigh, 0.065 * s.thigh, thighLen, 24]} />
+      </mesh>
+      {/* Knee */}
+      <mesh position={[x, kneeY, 0]} material={skin}>
+        <sphereGeometry args={[0.06, 20, 20]} />
+      </mesh>
+      {/* Calf */}
+      <mesh position={[x, (kneeY + ankleY) / 2, 0]} material={skin}>
+        <cylinderGeometry args={[0.06 * s.calf, 0.045, calfLen, 24]} />
+      </mesh>
+    </group>
+  );
+}
+
+function Foot({
+  side, ankleY, skin, shoe,
+}: {
+  side: 1 | -1;
+  ankleY: number;
+  skin: THREE.Material;
+  shoe?: GarmentPlan["shoes"];
+}) {
+  const x = side * 0.08;
+  if (!shoe) {
+    return (
+      <mesh position={[x, ankleY - 0.02, 0.04]} material={skin}>
+        <boxGeometry args={[0.07, 0.04, 0.18]} />
+      </mesh>
+    );
+  }
+  const mat = new THREE.MeshStandardMaterial({ color: shoe.color, roughness: 0.4, metalness: 0.15 });
+  if (shoe.kind === "heel") {
+    return (
+      <group>
+        <mesh position={[x, ankleY - 0.015, 0.06]} material={mat}>
+          <boxGeometry args={[0.06, 0.03, 0.18]} />
+        </mesh>
+        <mesh position={[x, ankleY - 0.06, -0.04]} material={mat}>
+          <boxGeometry args={[0.02, 0.08, 0.02]} />
+        </mesh>
+      </group>
+    );
+  }
+  if (shoe.kind === "boot") {
+    return (
+      <group>
+        <mesh position={[x, ankleY + 0.05, 0]} material={mat}>
+          <cylinderGeometry args={[0.06, 0.07, 0.16, 16]} />
+        </mesh>
+        <mesh position={[x, ankleY - 0.03, 0.05]} material={mat}>
+          <boxGeometry args={[0.08, 0.05, 0.20]} />
+        </mesh>
+      </group>
+    );
+  }
+  // sneaker / flat
+  return (
+    <mesh position={[x, ankleY - 0.015, 0.05]} material={mat}>
+      <boxGeometry args={[0.085, 0.06, 0.22]} />
+    </mesh>
+  );
+}
+
+function Top({
+  color, sleeves, length, torsoTop, torsoMid, waistY, hipY, s, fo, gender,
+}: {
+  color: string; sleeves: "none" | "short" | "long";
+  length: "crop" | "regular" | "long";
+  torsoTop: number; torsoMid: number; waistY: number; hipY: number;
+  s: Shape; fo: number; gender: Gender;
+}) {
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.65 });
+  const bottom = length === "crop" ? torsoMid - 0.02 : length === "long" ? hipY - 0.05 : waistY - 0.02;
+  const top = torsoTop + 0.02;
+  const midY = (top + bottom) / 2;
+  const heightT = top - bottom;
+  const chestR = (0.19 + (gender === "Female" ? s.bust * 0.25 : 0)) * s.chest + fo;
+  const waistR = 0.155 * s.waist + fo;
+  return (
+    <group>
+      <mesh position={[0, midY, 0]} scale={[1, 1, 0.78]} material={mat}>
+        <cylinderGeometry args={[chestR, waistR, heightT, 36]} />
+      </mesh>
+      {sleeves !== "none" && (
+        <>
+          <Sleeve side={-1} long={sleeves === "long"} torsoTop={torsoTop} mat={mat} s={s} />
+          <Sleeve side={1}  long={sleeves === "long"} torsoTop={torsoTop} mat={mat} s={s} />
+        </>
+      )}
+    </group>
+  );
+}
+
+function Sleeve({
+  side, long, torsoTop, mat, s,
+}: { side: 1 | -1; long: boolean; torsoTop: number; mat: THREE.Material; s: Shape }) {
+  const x = side * (0.20 * s.shoulderW + 0.02);
+  if (!long) {
+    return (
+      <mesh position={[x, torsoTop - 0.06, 0]} material={mat}>
+        <cylinderGeometry args={[0.06 * s.arm, 0.05 * s.arm, 0.16, 16]} />
+      </mesh>
+    );
+  }
+  return (
+    <mesh position={[x, torsoTop - 0.22, 0]} material={mat}>
+      <cylinderGeometry args={[0.055 * s.arm, 0.045 * s.arm, 0.55, 16]} />
+    </mesh>
+  );
+}
+
+function Bottom({
+  color, kind, length, hipY, kneeY, ankleY, s, fo,
+}: {
+  color: string; kind: "pants" | "skirt"; length: "shorts" | "mini" | "knee" | "long";
+  hipY: number; kneeY: number; ankleY: number; s: Shape; fo: number;
+}) {
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.7 });
+  if (kind === "skirt") {
+    const bottomY = length === "mini" ? hipY - 0.18 : length === "knee" ? kneeY : ankleY + 0.1;
+    const topY = hipY + 0.02;
+    const midY = (topY + bottomY) / 2;
+    const h = topY - bottomY;
+    return (
+      <mesh position={[0, midY, 0]} material={mat}>
+        <cylinderGeometry args={[0.18 * s.hip + fo, 0.30 * s.hip + fo, h, 32, 1, true]} />
+      </mesh>
+    );
+  }
+  // pants
+  const endY = length === "shorts" ? hipY - 0.15 : length === "knee" ? kneeY : ankleY + 0.02;
+  return (
+    <group>
+      {/* hip band */}
+      <mesh position={[0, hipY - 0.02, 0]} scale={[s.hip, 1, s.hip * 0.82]} material={mat}>
+        <cylinderGeometry args={[0.18 + fo, 0.16 + fo, 0.10, 32]} />
+      </mesh>
+      {/* legs */}
+      <mesh position={[-0.08 * s.hip, (hipY - 0.07 + endY) / 2, 0]} material={mat}>
+        <cylinderGeometry args={[0.10 * s.thigh + fo, 0.075 + fo, hipY - 0.07 - endY, 24]} />
+      </mesh>
+      <mesh position={[0.08 * s.hip, (hipY - 0.07 + endY) / 2, 0]} material={mat}>
+        <cylinderGeometry args={[0.10 * s.thigh + fo, 0.075 + fo, hipY - 0.07 - endY, 24]} />
+      </mesh>
+    </group>
+  );
+}
+
+function Dress({
+  color, accent, length, torsoMid, waistY, hipY, s, fo, gender,
+}: {
+  color: string; accent?: string; length: "mini" | "midi" | "maxi";
+  torsoMid: number; waistY: number; hipY: number; s: Shape; fo: number; gender: Gender;
+}) {
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.55, metalness: 0.05 });
+  const topY = torsoMid + 0.18;
+  const bottomY = length === "mini" ? hipY - 0.20 : length === "midi" ? 0.45 : 0.10;
+  // bodice
+  const bodMid = (topY + waistY) / 2;
+  const bodH = topY - waistY;
+  // skirt
+  const skirtMid = (waistY + bottomY) / 2;
+  const skirtH = waistY - bottomY;
+  const chestR = (0.18 + (gender === "Female" ? s.bust * 0.30 : 0)) * s.chest + fo;
+  return (
+    <group>
+      <mesh position={[0, bodMid, 0]} scale={[1, 1, 0.78]} material={mat}>
+        <cylinderGeometry args={[chestR, 0.14 * s.waist + fo, bodH, 36]} />
+      </mesh>
+      <mesh position={[0, skirtMid, 0]} material={mat}>
+        <cylinderGeometry args={[0.16 * s.waist + fo, 0.30 + fo + (length === "maxi" ? 0.05 : 0), skirtH, 36, 1, true]} />
+      </mesh>
+      {accent && (
+        <mesh position={[0, waistY, 0]} scale={[1, 1, 0.8]}>
+          <torusGeometry args={[0.16 * s.waist + fo + 0.005, 0.01, 12, 36]} />
+          <meshStandardMaterial color={accent} roughness={0.35} metalness={0.3} />
+        </mesh>
+      )}
+    </group>
+  );
+}
+
+function Outer({
+  color, torsoTop, waistY, s, fo,
+}: { color: string; torsoTop: number; waistY: number; s: Shape; fo: number }) {
+  const mat = new THREE.MeshStandardMaterial({ color, roughness: 0.6 });
+  const midY = (torsoTop + waistY) / 2;
+  const h = torsoTop - waistY + 0.1;
+  return (
+    <group>
+      <mesh position={[-0.11 * s.chest, midY, 0.02]} scale={[1, 1, 0.6]} material={mat}>
+        <boxGeometry args={[0.10 + fo, h, 0.30 + fo]} />
+      </mesh>
+      <mesh position={[0.11 * s.chest, midY, 0.02]} scale={[1, 1, 0.6]} material={mat}>
+        <boxGeometry args={[0.10 + fo, h, 0.30 + fo]} />
+      </mesh>
+    </group>
+  );
+}
+
+/* ──────────────── Scene + exported component ──────────────── */
+
+function fitLabel(fit: Fit): string {
+  return fit === "tight" ? "Tight" : fit === "perfect" ? "Perfect Fit" : fit === "relaxed" ? "Relaxed" : "Oversized";
+}
+
+export function Mannequin({
+  height = 168, weight = 60, gender = "Female", bodyType = "Curvy",
+  fit = "perfect", product, footwear, bag, accessory,
+}: MannequinProps) {
+  const shape = useMemo(
+    () => computeShape(height, weight, gender, bodyType),
     [height, weight, gender, bodyType],
   );
-  const measurements = useInterpolatedMeasurements(targetMeasurements);
-  const silhouette = useMemo(() => generateSilhouette(measurements), [measurements]);
-  const garmentFit = useMemo(
-    () => (product ? applyGarmentFit(product, measurements, fit) : null),
-    [product, measurements, fit],
-  );
-  const garmentPaths = useMemo(
-    () => (product && garmentFit ? generateGarmentPaths(product, measurements, garmentFit) : null),
-    [product, measurements, garmentFit],
-  );
-  const showProduct = !showSkeleton && product && garmentFit && garmentPaths;
-  const massLabel = calculateBodyScale(height, weight).massT;
+  const plan = useMemo(() => planFromProduct(product, footwear), [product, footwear]);
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
 
   return (
-    <div className="relative mx-auto aspect-[3/5] w-full max-w-[520px] select-none">
-      {/* Showroom backdrop */}
-      <div
-        aria-hidden
-        className="absolute inset-0 -z-10 overflow-hidden rounded-[32px]"
-        style={{
-          background:
-            "radial-gradient(ellipse 90% 60% at 50% 22%, rgba(160,90,200,0.40), transparent 65%), " +
-            "radial-gradient(ellipse 70% 45% at 50% 92%, rgba(236,79,138,0.32), transparent 70%), " +
-            "linear-gradient(180deg, #1a0f24 0%, #0c0712 60%, #08050d 100%)",
-        }}
-      >
-        {/* top LED strip */}
-        <div className="absolute left-[8%] right-[8%] top-[8%] h-[2px] rounded-full opacity-80"
-             style={{ background: "linear-gradient(90deg, transparent, #fff, transparent)", filter: "blur(1px)" }} />
-        {/* runway floor neon */}
-        <div className="absolute bottom-[8%] left-0 right-0 h-[2px] opacity-70"
-             style={{ background: "linear-gradient(90deg, transparent 8%, oklch(0.7 0.26 350) 35%, oklch(0.6 0.25 295) 65%, transparent 92%)", filter: "blur(2px)" }} />
-        {/* faint grid */}
-        <div className="absolute inset-0 grid-bg opacity-[0.06]" />
-      </div>
-
-      <div
-        className="relative h-full w-full"
-        style={{
-          transform: `perspective(1400px) rotateY(${rotation}deg)`,
-          transformStyle: "preserve-3d",
-          transition: "transform 700ms cubic-bezier(0.16, 1, 0.3, 1)",
-        }}
-      >
-        <svg
-          role="img"
-          aria-label={product ? `Reactive AI mannequin wearing ${product.name}` : "Reactive AI fitting mannequin"}
-          viewBox="0 0 320 540"
-          className="absolute inset-0 h-full w-full overflow-visible"
-          style={{ filter: "drop-shadow(0 34px 46px rgba(0,0,0,0.55)) drop-shadow(0 0 34px rgba(180,90,200,0.16))" }}
+    <div className="relative w-full aspect-[3/4] rounded-3xl overflow-hidden bg-gradient-to-b from-[#1a1622] via-[#0f0d18] to-[#080610] border border-white/5 shadow-2xl">
+      {mounted && (
+        <Canvas
+          shadows
+          dpr={[1, 2]}
+          camera={{ position: [0, 0.15, 2.4], fov: 32 }}
+          gl={{ antialias: true, alpha: true }}
         >
-          <defs>
-            <linearGradient id={`body-${uid}`} x1="90" x2="230" y1="70" y2="520" gradientUnits="userSpaceOnUse">
-              <stop stopColor="oklch(0.88 0.018 305)" />
-              <stop offset="0.46" stopColor="oklch(0.58 0.025 300)" />
-              <stop offset="1" stopColor="oklch(0.27 0.025 300)" />
-            </linearGradient>
-            <radialGradient id={`body-highlight-${uid}`} cx="38%" cy="20%" r="75%">
-              <stop stopColor="white" stopOpacity="0.34" />
-              <stop offset="0.35" stopColor="white" stopOpacity="0.08" />
-              <stop offset="1" stopColor="black" stopOpacity="0.28" />
-            </radialGradient>
-            <linearGradient id={`garment-${uid}`} x1="90" x2="230" y1="110" y2="430" gradientUnits="userSpaceOnUse">
-              <stop stopColor={product?.accent ?? product?.color ?? "oklch(0.7 0.26 350)"} />
-              <stop offset="0.52" stopColor={product?.color ?? "oklch(0.62 0.26 320)"} />
-              <stop offset="1" stopColor={product?.color ?? "oklch(0.45 0.16 300)"} stopOpacity="0.72" />
-            </linearGradient>
-            <linearGradient id={`garment-shine-${uid}`} x1="94" x2="218" y1="116" y2="420" gradientUnits="userSpaceOnUse">
-              <stop stopColor="white" stopOpacity="0.34" />
-              <stop offset="0.28" stopColor="white" stopOpacity="0.04" />
-              <stop offset="0.72" stopColor="black" stopOpacity="0.08" />
-              <stop offset="1" stopColor="black" stopOpacity="0.2" />
-            </linearGradient>
-            <filter id={`soft-shadow-${uid}`} x="-35%" y="-20%" width="170%" height="155%">
-              <feDropShadow dx="0" dy="12" stdDeviation="12" floodColor="black" floodOpacity="0.33" />
-            </filter>
-          </defs>
-
-          <ellipse cx="160" cy="520" rx={72 + measurements.hipW * 0.28} ry="14" fill="black" opacity="0.34" />
-          <ellipse cx="160" cy="514" rx={52 + measurements.hipW * 0.18} ry="7" fill="oklch(0.7 0.26 350)" opacity="0.18" />
-
-          <g filter={`url(#soft-shadow-${uid})`} style={{ transformBox: "fill-box", transformOrigin: "center bottom", animation: "float 7s ease-in-out infinite" }}>
-            <g opacity="0.98">
-              <path d={silhouette.leftArm} fill={`url(#body-${uid})`} />
-              <path d={silhouette.rightArm} fill={`url(#body-${uid})`} />
-              <path d={silhouette.leftLeg} fill={`url(#body-${uid})`} />
-              <path d={silhouette.rightLeg} fill={`url(#body-${uid})`} />
-              <path d={silhouette.torso} fill={`url(#body-${uid})`} />
-              <path d={silhouette.neck} fill={`url(#body-${uid})`} />
-              <ellipse cx={measurements.cx} cy={measurements.headY} rx={measurements.headRx} ry={measurements.headRy} fill={`url(#body-${uid})`} />
-              <path d={silhouette.torso} fill={`url(#body-highlight-${uid})`} opacity="0.5" />
-              <ellipse cx={measurements.cx - 6} cy={measurements.headY - 6} rx={measurements.headRx * 0.58} ry={measurements.headRy * 0.7} fill="white" opacity="0.08" />
-            </g>
-
-            {showProduct && (
-              <GarmentLayer
-                product={product}
-                paths={garmentPaths}
-                fit={garmentFit}
-                measurements={measurements}
-                gradientId={`garment-${uid}`}
-                shineId={`garment-shine-${uid}`}
-              />
-            )}
-
-            <g pointerEvents="none" opacity="0.34" style={{ mixBlendMode: "screen" }}>
-              <path d={`M ${measurements.cx - measurements.chestW * 0.18} ${measurements.shoulderY + 22} C ${measurements.cx - 4} ${measurements.waistY - 8}, ${measurements.cx - 7} ${measurements.hipY + 34}, ${measurements.cx - 4} ${measurements.kneeY}`} stroke="white" strokeWidth="1.2" fill="none" />
-              <path d={`M ${measurements.cx + measurements.chestW * 0.2} ${measurements.shoulderY + 26} C ${measurements.cx + 8} ${measurements.waistY - 2}, ${measurements.cx + 10} ${measurements.hipY + 30}, ${measurements.cx + 6} ${measurements.kneeY}`} stroke="white" strokeWidth="0.8" fill="none" opacity="0.45" />
-            </g>
-          </g>
-
-          <g opacity="0.78">
-            <line x1="46" x2="46" y1={measurements.topY + 8} y2={measurements.floorY - 10} stroke="oklch(0.7 0.26 350)" strokeWidth="1" strokeDasharray="3 7" />
-            <text x="58" y={measurements.topY + 22} fill="oklch(0.7 0.02 300)" fontSize="9" letterSpacing="1.4">{height}CM</text>
-            <text x="58" y={measurements.topY + 37} fill="oklch(0.7 0.26 350)" fontSize="8" letterSpacing="1.1">MORPH {massLabel > 0.45 ? "FULL" : massLabel < -0.35 ? "SLIM" : "BALANCED"}</text>
-          </g>
-        </svg>
-
-        {/* Top spotlight wash */}
-        <div
-          aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-[32px]"
-          style={{
-            background:
-              "radial-gradient(ellipse 55% 30% at 50% 10%, rgba(255,255,255,0.18), transparent 70%)",
-            mixBlendMode: "screen",
-          }}
-        />
-
-        {/* Accessory chips (heels/bag/sunnies/belt shown as floating product tags) */}
-        {!showSkeleton && (footwear || bag || accessory) && (
-          <div className="pointer-events-none absolute inset-0">
-            {footwear && (
-              <AccessoryTag
-                className="bottom-[8%] right-[6%]"
-                label="Footwear" name={footwear.name} brand={footwear.brand} color={footwear.color}
-              />
-            )}
-            {bag && (
-              <AccessoryTag
-                className="top-[42%] right-[4%]"
-                label="Bag" name={bag.name} brand={bag.brand} color={bag.color}
-              />
-            )}
-            {accessory && (
-              <AccessoryTag
-                className="top-[16%] left-[4%]"
-                label="Accessory" name={accessory.name} brand={accessory.brand} color={accessory.color}
-              />
-            )}
-          </div>
-        )}
-
-        {/* Scan overlay */}
-        {scanning && (
-          <>
-            <div className="absolute inset-0 grid-bg opacity-30" />
-            <div
-              className="absolute inset-x-0 h-[3px] rounded-full"
-              style={{
-                background: "linear-gradient(90deg, transparent, oklch(0.7 0.26 350), transparent)",
-                boxShadow: "0 0 24px 6px oklch(0.7 0.26 350 / 0.6)",
-                animation: "scan 2.2s ease-in-out infinite",
-              }}
-            />
-            <div className="pointer-events-none absolute inset-0 mix-blend-screen"
-                 style={{ background: "linear-gradient(180deg, transparent 40%, rgba(236,79,138,0.10) 50%, transparent 60%)" }} />
-          </>
-        )}
-      </div>
-
-      {/* Fit pill anchored bottom — confirms which outfit is fitted */}
-      {showProduct && product && (
-        <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center">
-          <div className="glass-strong flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[11px]">
-            <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-success)] animate-pulse" />
-            Fitted · {fit.charAt(0).toUpperCase() + fit.slice(1)}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-function GarmentLayer({
-  product, paths, fit, measurements, gradientId, shineId,
-}: {
-  product: Product;
-  paths: ReturnType<typeof generateGarmentPaths>;
-  fit: GarmentFit;
-  measurements: BodyMeasurements;
-  gradientId: string;
-  shineId: string;
-}) {
-  const outline = product.color === "#111114" || product.color === "#0d0d10" ? "white" : "black";
-  const outlineOpacity = product.color === "#111114" || product.color === "#0d0d10" ? 0.24 : 0.15;
-  const isDress = product.category === "Dress";
-  const isSkirt = product.category === "Skirt";
-  const isBottom = product.category === "Jeans" || product.category === "Trousers";
-  const isStructured = product.category === "Blazer" || product.category === "Jacket";
-  const isHoodie = product.category === "Hoodie";
-  const isSleeveless = product.silhouette === "midi-dress" || product.silhouette === "mini-dress" || product.silhouette === "maxi-dress";
-  const looseness = fit.drape / 20;
-
-  return (
-    <g className="animate-fade-in">
-      {(isDress || isSkirt) && (
-        <path
-          d={isDress ? paths.dress : paths.skirt}
-          fill={`url(#${gradientId})`}
-          stroke={outline}
-          strokeOpacity={outlineOpacity}
-          strokeWidth="1.2"
-        />
-      )}
-
-      {!isDress && !isSkirt && !isBottom && (
-        <>
-          <path d={paths.bodice} fill={`url(#${gradientId})`} stroke={outline} strokeOpacity={outlineOpacity} strokeWidth="1.2" />
-          <path d={paths.leftSleeve} fill={`url(#${gradientId})`} stroke={outline} strokeOpacity={outlineOpacity * 0.9} strokeWidth="1" />
-          <path d={paths.rightSleeve} fill={`url(#${gradientId})`} stroke={outline} strokeOpacity={outlineOpacity * 0.9} strokeWidth="1" />
-        </>
-      )}
-
-      {isDress && !isSleeveless && (
-        <>
-          <path d={paths.leftSleeve} fill={`url(#${gradientId})`} opacity="0.94" />
-          <path d={paths.rightSleeve} fill={`url(#${gradientId})`} opacity="0.94" />
-        </>
-      )}
-
-      {isBottom && (
-        <>
-          <path d={paths.leftPant} fill={`url(#${gradientId})`} stroke={outline} strokeOpacity={outlineOpacity} strokeWidth="1" />
-          <path d={paths.rightPant} fill={`url(#${gradientId})`} stroke={outline} strokeOpacity={outlineOpacity} strokeWidth="1" />
-          <path
-            d={`M ${measurements.cx - fit.hipW / 2} ${measurements.hipY - 10} C ${measurements.cx - fit.waistW / 2} ${measurements.waistY + 10}, ${measurements.cx + fit.waistW / 2} ${measurements.waistY + 10}, ${measurements.cx + fit.hipW / 2} ${measurements.hipY - 10} L ${measurements.cx + fit.hipW / 2 - 6} ${measurements.hipY + 10} C ${measurements.cx + fit.waistW / 2} ${measurements.hipY + 14}, ${measurements.cx - fit.waistW / 2} ${measurements.hipY + 14}, ${measurements.cx - fit.hipW / 2 + 6} ${measurements.hipY + 10} Z`}
-            fill={`url(#${gradientId})`}
-            opacity="0.98"
+          <color attach="background" args={["#0f0d18"]} />
+          <ambientLight intensity={0.55} />
+          <directionalLight position={[2, 3, 2]} intensity={1.2} castShadow shadow-mapSize={[1024, 1024]} />
+          <directionalLight position={[-2, 2, -1]} intensity={0.35} color="#b59cff" />
+          <spotLight position={[0, 3, 2]} intensity={0.6} angle={0.6} penumbra={1} color="#ec4f8a" />
+          <Suspense fallback={null}>
+            <Human shape={shape} plan={plan} fit={fit} gender={gender} />
+            <ContactShadows position={[0, -0.86, 0]} opacity={0.5} scale={3.5} blur={2.4} far={1.5} />
+            <Environment preset="city" />
+          </Suspense>
+          <OrbitControls
+            enablePan
+            enableZoom
+            minDistance={1.4}
+            maxDistance={4}
+            minPolarAngle={Math.PI / 4}
+            maxPolarAngle={Math.PI / 1.8}
+            target={[0, 0.05, 0]}
           />
-        </>
+        </Canvas>
       )}
 
-      {isSkirt && (
-        <path
-          d={`M ${measurements.cx - fit.waistW / 2} ${measurements.waistY - 8} C ${measurements.cx - fit.waistW * 0.24} ${measurements.waistY + 3}, ${measurements.cx + fit.waistW * 0.24} ${measurements.waistY + 3}, ${measurements.cx + fit.waistW / 2} ${measurements.waistY - 8} L ${measurements.cx + fit.waistW / 2 + 4} ${measurements.waistY + 8} C ${measurements.cx + 18} ${measurements.waistY + 17}, ${measurements.cx - 18} ${measurements.waistY + 17}, ${measurements.cx - fit.waistW / 2 - 4} ${measurements.waistY + 8} Z`}
-          fill={`url(#${gradientId})`}
-        />
-      )}
-
-      {isStructured && (
-        <>
-          <path d={`M ${measurements.cx - 9} ${measurements.shoulderY + 22} L ${measurements.cx - fit.chestW * 0.28} ${measurements.waistY + 16} L ${measurements.cx - 2} ${measurements.waistY + 4} Z`} fill="black" opacity="0.25" />
-          <path d={`M ${measurements.cx + 9} ${measurements.shoulderY + 22} L ${measurements.cx + fit.chestW * 0.28} ${measurements.waistY + 16} L ${measurements.cx + 2} ${measurements.waistY + 4} Z`} fill="black" opacity="0.25" />
-        </>
-      )}
-
-      {isHoodie && (
-        <path
-          d={`M ${measurements.cx - 27} ${measurements.shoulderY + 12} C ${measurements.cx - 34} ${measurements.neckY + 14}, ${measurements.cx + 34} ${measurements.neckY + 14}, ${measurements.cx + 27} ${measurements.shoulderY + 12} C ${measurements.cx + 18} ${measurements.shoulderY + 34}, ${measurements.cx - 18} ${measurements.shoulderY + 34}, ${measurements.cx - 27} ${measurements.shoulderY + 12} Z`}
-          fill="black"
-          opacity="0.22"
-        />
-      )}
-
-      {isDress && product.silhouette === "maxi-dress" && (
-        <g opacity="0.42">
-          {[-0.32, -0.16, 0.02, 0.19, 0.35].map((n) => (
-            <path key={n} d={`M ${measurements.cx + fit.waistW * n} ${measurements.waistY + 8} C ${measurements.cx + fit.hemW * n * 0.8} ${measurements.hipY + 82}, ${measurements.cx + fit.hemW * n} ${measurements.ankleY - 26}, ${measurements.cx + fit.hemW * n * 0.94} ${measurements.ankleY + 4}`} stroke="white" strokeWidth="0.8" strokeOpacity="0.42" fill="none" />
-          ))}
-        </g>
-      )}
-
-      {product.silhouette === "wide-jeans" && (
-        <path d={`M ${measurements.cx} ${measurements.crotchY + 8} C ${measurements.cx - 3} ${measurements.kneeY}, ${measurements.cx - 2} ${measurements.ankleY - 12}, ${measurements.cx} ${measurements.ankleY + 2} M ${measurements.cx} ${measurements.crotchY + 8} C ${measurements.cx + 3} ${measurements.kneeY}, ${measurements.cx + 2} ${measurements.ankleY - 12}, ${measurements.cx} ${measurements.ankleY + 2}`} stroke="black" strokeWidth="1" strokeOpacity="0.18" fill="none" />
-      )}
-
-      <path
-        d={isDress ? paths.dress : isSkirt ? paths.skirt : isBottom ? `${paths.leftPant} ${paths.rightPant}` : paths.bodice}
-        fill={`url(#${shineId})`}
-        opacity="0.68"
-        style={{ mixBlendMode: product.color === "#f5e9d6" || product.color === "#f3f1ec" ? "multiply" : "screen" }}
-      />
-
-      <g opacity={fit.drape > 15 ? 0.5 : 0.3}>
-        <path d={`M ${measurements.cx - fit.chestW * 0.22} ${measurements.shoulderY + 28} C ${measurements.cx - fit.waistW * 0.18 - looseness * 4} ${measurements.waistY + 8}, ${measurements.cx - fit.hipW * 0.2 - looseness * 8} ${measurements.hipY + 36}, ${measurements.cx - fit.hipW * 0.18} ${measurements.hipY + 74}`} stroke="white" strokeWidth="0.9" strokeOpacity="0.5" fill="none" />
-        <path d={`M ${measurements.cx + fit.chestW * 0.18} ${measurements.shoulderY + 32} C ${measurements.cx + fit.waistW * 0.14 + looseness * 5} ${measurements.waistY + 14}, ${measurements.cx + fit.hipW * 0.16 + looseness * 8} ${measurements.hipY + 36}, ${measurements.cx + fit.hipW * 0.14} ${measurements.hipY + 82}`} stroke="black" strokeWidth="1" strokeOpacity="0.22" fill="none" />
-      </g>
-
-      {product.id === "mango-floral" && (
-        <g opacity="0.42">
-          {[
-            [measurements.cx - 24, measurements.bustY + 14], [measurements.cx + 22, measurements.waistY + 22],
-            [measurements.cx - 38, measurements.hipY + 52], [measurements.cx + 34, measurements.kneeY - 5],
-          ].map(([x, y]) => (
-            <g key={`${x}-${y}`}>
-              <circle cx={x} cy={y} r="4" fill={product.accent ?? "white"} />
-              <circle cx={x + 5} cy={y - 2} r="3" fill="white" opacity="0.7" />
-            </g>
-          ))}
-        </g>
-      )}
-    </g>
-  );
-}
-
-function AccessoryTag({
-  className, label, name, brand, color,
-}: { className?: string; label: string; name: string; brand: string; color: string }) {
-  return (
-    <div className={`absolute ${className ?? ""}`}>
-      <div className="glass-strong flex items-center gap-2 rounded-2xl px-3 py-2 text-[11px] shadow-xl animate-fade-in">
-        <span className="h-5 w-5 rounded-full ring-2 ring-white/30" style={{ background: color }} />
-        <div className="leading-tight">
-          <div className="text-[9px] uppercase tracking-widest text-muted-foreground">{label}</div>
-          <div className="font-medium">{brand} · {name}</div>
-        </div>
+      {/* HUD */}
+      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3 text-[10px] uppercase tracking-widest text-white/70">
+        <span className="rounded-full bg-black/40 px-2 py-0.5 backdrop-blur">{gender} · {bodyType}</span>
+        <span className="rounded-full bg-black/40 px-2 py-0.5 backdrop-blur">{height}cm · {weight}kg</span>
       </div>
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between p-3 text-[10px] uppercase tracking-widest text-white/70">
+        <span className="rounded-full bg-black/40 px-2 py-0.5 backdrop-blur">
+          {product ? `${product.brand} · ${product.name}` : "No outfit"}
+        </span>
+        <span className="rounded-full bg-[var(--color-myntra-glow,#ec4f8a)]/80 text-white px-2 py-0.5 backdrop-blur">
+          {fitLabel(fit)}
+        </span>
+      </div>
+      {bag && (
+        <div className="pointer-events-none absolute bottom-12 right-3 rounded-full bg-black/40 px-2 py-0.5 text-[10px] uppercase tracking-widest text-white/70 backdrop-blur">
+          + {bag.name}
+        </div>
+      )}
+      {accessory && (
+        <div className="pointer-events-none absolute top-12 right-3 rounded-full bg-black/40 px-2 py-0.5 text-[10px] uppercase tracking-widest text-white/70 backdrop-blur">
+          + {accessory.name}
+        </div>
+      )}
     </div>
   );
 }
+
+export default Mannequin;
