@@ -22,7 +22,7 @@ import {
 } from "lucide-react";
 
 const WEBHOOK_URL = "https://hook.eu1.make.com/11jvi2slpo1x8f9ghdpqwymj4jgvebkh";
-const FEEDBACK_WEBHOOK_URL = "https://hook.eu1.make.com/11jvi2slpo1x8f9ghdpqwymj4jgvebkh";
+const FEEDBACK_WEBHOOK_URL = "https://hook.eu1.make.com/ypjab5k5fa7wnj8zar87i2jygt2piwmq";
 
 function getUserId(): string {
   if (typeof window === "undefined") return "anon";
