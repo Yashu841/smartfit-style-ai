@@ -189,7 +189,15 @@ function Human({
   });
 
   const skinMat = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: s.skin, roughness: 0.55, metalness: 0.02 }),
+    () => new THREE.MeshPhysicalMaterial({
+      color: s.skin,
+      roughness: 0.38,
+      metalness: 0.15,
+      clearcoat: 0.6,
+      clearcoatRoughness: 0.35,
+      sheen: 0.4,
+      sheenColor: new THREE.Color("#2a2230"),
+    }),
     [s.skin],
   );
   useEffect(() => { skinMat.color.set(s.skin); }, [s.skin, skinMat]);
