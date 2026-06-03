@@ -156,6 +156,7 @@ export function SmartFit() {
     setActiveOutfitId(profile.productId);
     const product = findById(profile.productId);
     const payload = {
+      user_id: getUserId(),
       height: profile.height,
       weight: profile.weight,
       gender: profile.gender,
