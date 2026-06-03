@@ -88,8 +88,9 @@ function computeShape(
   return {
     heightScale,
     shoulderW, chest, bust, waist, hip, thigh, calf, arm, forearm, muscle, neck,
-    skin: isMale ? "#d8a98a" : "#e7c4ad",
-    hair: isMale ? "#221a16" : "#2b1d1a",
+    // Matte-black digital-clone skin
+    skin: "#0e0e12",
+    hair: "#0a0a0e",
   };
 }
 
@@ -188,7 +189,15 @@ function Human({
   });
 
   const skinMat = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: s.skin, roughness: 0.55, metalness: 0.02 }),
+    () => new THREE.MeshPhysicalMaterial({
+      color: s.skin,
+      roughness: 0.38,
+      metalness: 0.15,
+      clearcoat: 0.6,
+      clearcoatRoughness: 0.35,
+      sheen: 0.4,
+      sheenColor: new THREE.Color("#2a2230"),
+    }),
     [s.skin],
   );
   useEffect(() => { skinMat.color.set(s.skin); }, [s.skin, skinMat]);
@@ -231,36 +240,10 @@ function Human({
       <mesh position={[0, head.y - 0.06, 0.005]} scale={[0.88, 0.7, 0.88]} material={skinMat}>
         <sphereGeometry args={[head.r, 32, 32]} />
       </mesh>
-      {/* Eyes */}
-      <mesh position={[-0.045, head.y + 0.015, 0.115]}>
-        <sphereGeometry args={[0.015, 16, 16]} />
-        <meshStandardMaterial color="#1a1a22" roughness={0.2} />
+      {/* Minimal facial plane — subtle nose ridge only, no eyes/lips/hair (digital clone) */}
+      <mesh position={[0, head.y - 0.01, 0.11]} scale={[0.18, 0.55, 0.5]} material={skinMat}>
+        <sphereGeometry args={[0.04, 16, 16]} />
       </mesh>
-      <mesh position={[0.045, head.y + 0.015, 0.115]}>
-        <sphereGeometry args={[0.015, 16, 16]} />
-        <meshStandardMaterial color="#1a1a22" roughness={0.2} />
-      </mesh>
-      {/* Lips */}
-      <mesh position={[0, head.y - 0.055, 0.118]} scale={[1, 0.35, 0.6]}>
-        <sphereGeometry args={[0.025, 16, 16]} />
-        <meshStandardMaterial color={gender === "Female" ? "#a8455a" : "#8a4a44"} roughness={0.5} />
-      </mesh>
-      {/* HAIR */}
-      <mesh
-        position={[0, head.y + (gender === "Female" ? 0.02 : 0.025), gender === "Female" ? -0.01 : 0]}
-        scale={gender === "Female"
-          ? [1.18, 1.35, 1.22]
-          : [1.05, 0.7, 1.05]}
-        material={hairMat}
-      >
-        <sphereGeometry args={[head.r, 32, 32]} />
-      </mesh>
-      {gender === "Female" && (
-        // long hair down the back
-        <mesh position={[0, head.y - 0.20, -0.08]} scale={[1.0, 2.2, 0.45]} material={hairMat}>
-          <sphereGeometry args={[head.r * 0.95, 24, 24]} />
-        </mesh>
-      )}
 
       {/* NECK */}
       <mesh position={[0, neck.y, 0]} material={skinMat}>
@@ -618,14 +601,15 @@ export function Mannequin({
           gl={{ antialias: true, alpha: true }}
         >
           <color attach="background" args={["#0f0d18"]} />
-          <ambientLight intensity={0.55} />
-          <directionalLight position={[2, 3, 2]} intensity={1.2} castShadow shadow-mapSize={[1024, 1024]} />
-          <directionalLight position={[-2, 2, -1]} intensity={0.35} color="#b59cff" />
-          <spotLight position={[0, 3, 2]} intensity={0.6} angle={0.6} penumbra={1} color="#ec4f8a" />
+          <ambientLight intensity={0.35} />
+          <directionalLight position={[2, 3, 2]} intensity={1.0} castShadow shadow-mapSize={[1024, 1024]} />
+          <directionalLight position={[-2.5, 1.5, -1]} intensity={0.8} color="#a78bfa" />
+          <directionalLight position={[0, 1.2, -2.5]} intensity={0.6} color="#ec4f8a" />
+          <spotLight position={[0, 3.2, 1.8]} intensity={0.9} angle={0.55} penumbra={1} color="#ffffff" />
           <Suspense fallback={null}>
             <Human shape={shape} plan={plan} fit={fit} gender={gender} />
-            <ContactShadows position={[0, -0.86, 0]} opacity={0.5} scale={3.5} blur={2.4} far={1.5} />
-            <Environment preset="city" />
+            <ContactShadows position={[0, -0.86, 0]} opacity={0.65} scale={3.5} blur={2.6} far={1.5} />
+            <Environment preset="studio" />
           </Suspense>
           <OrbitControls
             enablePan
