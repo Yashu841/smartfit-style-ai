@@ -240,36 +240,10 @@ function Human({
       <mesh position={[0, head.y - 0.06, 0.005]} scale={[0.88, 0.7, 0.88]} material={skinMat}>
         <sphereGeometry args={[head.r, 32, 32]} />
       </mesh>
-      {/* Eyes */}
-      <mesh position={[-0.045, head.y + 0.015, 0.115]}>
-        <sphereGeometry args={[0.015, 16, 16]} />
-        <meshStandardMaterial color="#1a1a22" roughness={0.2} />
+      {/* Minimal facial plane — subtle nose ridge only, no eyes/lips/hair (digital clone) */}
+      <mesh position={[0, head.y - 0.01, 0.11]} scale={[0.18, 0.55, 0.5]} material={skinMat}>
+        <sphereGeometry args={[0.04, 16, 16]} />
       </mesh>
-      <mesh position={[0.045, head.y + 0.015, 0.115]}>
-        <sphereGeometry args={[0.015, 16, 16]} />
-        <meshStandardMaterial color="#1a1a22" roughness={0.2} />
-      </mesh>
-      {/* Lips */}
-      <mesh position={[0, head.y - 0.055, 0.118]} scale={[1, 0.35, 0.6]}>
-        <sphereGeometry args={[0.025, 16, 16]} />
-        <meshStandardMaterial color={gender === "Female" ? "#a8455a" : "#8a4a44"} roughness={0.5} />
-      </mesh>
-      {/* HAIR */}
-      <mesh
-        position={[0, head.y + (gender === "Female" ? 0.02 : 0.025), gender === "Female" ? -0.01 : 0]}
-        scale={gender === "Female"
-          ? [1.18, 1.35, 1.22]
-          : [1.05, 0.7, 1.05]}
-        material={hairMat}
-      >
-        <sphereGeometry args={[head.r, 32, 32]} />
-      </mesh>
-      {gender === "Female" && (
-        // long hair down the back
-        <mesh position={[0, head.y - 0.20, -0.08]} scale={[1.0, 2.2, 0.45]} material={hairMat}>
-          <sphereGeometry args={[head.r * 0.95, 24, 24]} />
-        </mesh>
-      )}
 
       {/* NECK */}
       <mesh position={[0, neck.y, 0]} material={skinMat}>
