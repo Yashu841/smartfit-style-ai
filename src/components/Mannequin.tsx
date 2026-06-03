@@ -601,14 +601,15 @@ export function Mannequin({
           gl={{ antialias: true, alpha: true }}
         >
           <color attach="background" args={["#0f0d18"]} />
-          <ambientLight intensity={0.55} />
-          <directionalLight position={[2, 3, 2]} intensity={1.2} castShadow shadow-mapSize={[1024, 1024]} />
-          <directionalLight position={[-2, 2, -1]} intensity={0.35} color="#b59cff" />
-          <spotLight position={[0, 3, 2]} intensity={0.6} angle={0.6} penumbra={1} color="#ec4f8a" />
+          <ambientLight intensity={0.35} />
+          <directionalLight position={[2, 3, 2]} intensity={1.0} castShadow shadow-mapSize={[1024, 1024]} />
+          <directionalLight position={[-2.5, 1.5, -1]} intensity={0.8} color="#a78bfa" />
+          <directionalLight position={[0, 1.2, -2.5]} intensity={0.6} color="#ec4f8a" />
+          <spotLight position={[0, 3.2, 1.8]} intensity={0.9} angle={0.55} penumbra={1} color="#ffffff" />
           <Suspense fallback={null}>
             <Human shape={shape} plan={plan} fit={fit} gender={gender} />
-            <ContactShadows position={[0, -0.86, 0]} opacity={0.5} scale={3.5} blur={2.4} far={1.5} />
-            <Environment preset="city" />
+            <ContactShadows position={[0, -0.86, 0]} opacity={0.65} scale={3.5} blur={2.6} far={1.5} />
+            <Environment preset="studio" />
           </Suspense>
           <OrbitControls
             enablePan
