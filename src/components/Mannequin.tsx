@@ -88,8 +88,9 @@ function computeShape(
   return {
     heightScale,
     shoulderW, chest, bust, waist, hip, thigh, calf, arm, forearm, muscle, neck,
-    skin: isMale ? "#d8a98a" : "#e7c4ad",
-    hair: isMale ? "#221a16" : "#2b1d1a",
+    // Matte-black digital-clone skin
+    skin: "#0e0e12",
+    hair: "#0a0a0e",
   };
 }
 
