@@ -597,7 +597,7 @@ export function Mannequin({
         <Canvas
           shadows
           dpr={[1, 2]}
-          camera={{ position: [0, 0.15, 2.4], fov: 32 }}
+          camera={{ position: [0, 0.1, 3.6], fov: 30 }}
           gl={{ antialias: true, alpha: true }}
         >
           <color attach="background" args={["#0f0d18"]} />
@@ -608,14 +608,14 @@ export function Mannequin({
           <spotLight position={[0, 3.2, 1.8]} intensity={0.9} angle={0.55} penumbra={1} color="#ffffff" />
           <Suspense fallback={null}>
             <Human shape={shape} plan={plan} fit={fit} gender={gender} />
-            <ContactShadows position={[0, -0.86, 0]} opacity={0.65} scale={3.5} blur={2.6} far={1.5} />
+            <ContactShadows position={[0, -0.88, 0]} opacity={0.65} scale={3.5} blur={2.6} far={1.5} />
             <Environment preset="studio" />
           </Suspense>
           <OrbitControls
             enablePan
             enableZoom
-            minDistance={1.4}
-            maxDistance={4}
+            minDistance={2.2}
+            maxDistance={5.5}
             minPolarAngle={Math.PI / 4}
             maxPolarAngle={Math.PI / 1.8}
             target={[0, 0.05, 0]}
