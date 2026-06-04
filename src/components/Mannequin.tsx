@@ -221,14 +221,12 @@ function Avatar({ url, targets, heightScale, garmentTopColor, garmentBottomColor
     }
   }, [overlays, garmentTopColor, garmentBottomColor]);
 
-  // GLB axis: head along -Z, feet near Z=0, units in cm.
-  // Rotate +90° around X so -Z becomes +Y (head up), scale cm→m.
-  const baseScale = 0.011 * heightScale;
+  // The uploaded GLBs already contain their own upright node rotation.
+  // Keep that native transform, only scale to fitting-room size.
+  const baseScale = 0.11 * heightScale;
   return (
-    <group ref={groupRef} position={[0, -0.9, 0]}>
-      <group rotation={[Math.PI / 2, 0, 0]} scale={baseScale}>
-        <primitive object={cloned} />
-      </group>
+    <group ref={groupRef} position={[0, -0.86, -0.05]} scale={baseScale}>
+      <primitive object={cloned} />
     </group>
   );
 }
