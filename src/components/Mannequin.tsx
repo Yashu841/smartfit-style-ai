@@ -221,9 +221,14 @@ function Avatar({ url, targets, heightScale, garmentTopColor, garmentBottomColor
     }
   }, [overlays, garmentTopColor, garmentBottomColor]);
 
+  // GLB axis: head along -Z, feet near Z=0, units in cm.
+  // Rotate -90° around X so -Z becomes +Y (head up), scale cm→m.
+  const baseScale = 0.011 * heightScale;
   return (
-    <group ref={groupRef} scale={heightScale} position={[0, -0.9, 0]}>
-      <primitive object={cloned} />
+    <group ref={groupRef} position={[0, -0.9, 0]}>
+      <group rotation={[-Math.PI / 2, 0, 0]} scale={baseScale}>
+        <primitive object={cloned} />
+      </group>
     </group>
   );
 }
