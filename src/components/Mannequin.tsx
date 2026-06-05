@@ -386,6 +386,10 @@ export function Mannequin({
           <directionalLight position={[0, 1.2, -2.5]} intensity={0.6} color="#ec4f8a" />
           <spotLight position={[0, 3.2, 1.8]} intensity={0.9} angle={0.55} penumbra={1} color="#ffffff" />
           <Suspense fallback={null}>
+            <mesh position={[0, -0.9, 0]}>
+              <boxGeometry args={[0.08, 0.08, 0.08]} />
+              <meshBasicMaterial color="#ff00ff" />
+            </mesh>
             <Avatar
               url={url}
               targets={targets}
