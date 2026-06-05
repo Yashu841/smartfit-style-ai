@@ -167,6 +167,10 @@ function Avatar({ url, targets, heightScale, rotationY, garmentTopColor, garment
       obj.visible = true;
       const mesh = obj as THREE.Mesh;
       if ((mesh as any).isMesh) {
+        if (mesh.name.toLowerCase().includes("high-poly")) {
+          mesh.visible = false;
+          return;
+        }
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         mesh.frustumCulled = false;
@@ -317,7 +321,7 @@ function Avatar({ url, targets, heightScale, rotationY, garmentTopColor, garment
   // The uploaded GLBs already contain their own upright node rotation.
   // Keep that native transform, normalize from the actual source bounds.
   return (
-    <group ref={groupRef} position={[0, -0.95, 0]} rotation={[0, rotationY, 0]} scale={normalizedTransform.scale * 1.35}>
+    <group ref={groupRef} position={[0, -0.92, 0]} rotation={[0, rotationY, 0]} scale={normalizedTransform.scale * 0.86}>
       <primitive object={cloned} position={normalizedTransform.offset.toArray()} />
     </group>
   );
@@ -383,10 +387,6 @@ export function Mannequin({
           <directionalLight position={[0, 1.2, -2.5]} intensity={0.6} color="#ec4f8a" />
           <spotLight position={[0, 3.2, 1.8]} intensity={0.9} angle={0.55} penumbra={1} color="#ffffff" />
           <Suspense fallback={null}>
-            <mesh position={[0, -0.9, 0]}>
-              <boxGeometry args={[0.08, 0.08, 0.08]} />
-              <meshBasicMaterial color="#ff00ff" />
-            </mesh>
             <Avatar
               url={url}
               targets={targets}
