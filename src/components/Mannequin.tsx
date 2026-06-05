@@ -169,9 +169,6 @@ function Avatar({ url, targets, heightScale, rotationY, garmentTopColor, garment
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         mesh.frustumCulled = false;
-        if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) {
-          (mesh as THREE.SkinnedMesh).skeleton.pose();
-        }
         if (mesh.morphTargetInfluences) {
           mesh.morphTargetInfluences.fill(0);
         }
@@ -187,13 +184,13 @@ function Avatar({ url, targets, heightScale, rotationY, garmentTopColor, garment
         }
         // Premium matte dark skin material
         const baseMat = new THREE.MeshPhysicalMaterial({
-          color: new THREE.Color("#1d1a24"),
-          roughness: 0.55,
+          color: new THREE.Color("#9a7f75"),
+          roughness: 0.5,
           metalness: 0.05,
-          clearcoat: 0.25,
+          clearcoat: 0.18,
           clearcoatRoughness: 0.6,
           sheen: 0.4,
-          sheenColor: new THREE.Color("#3a2a44"),
+          sheenColor: new THREE.Color("#f0b6a8"),
         });
         mesh.material = baseMat;
       }
