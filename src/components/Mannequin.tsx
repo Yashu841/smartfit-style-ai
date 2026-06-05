@@ -164,6 +164,7 @@ function Avatar({ url, targets, heightScale, rotationY, garmentTopColor, garment
     const c = cloneSkeleton(scene) as THREE.Group;
     const detectedMorphTargets: { mesh: string; target: string; index: number; defaultValue: number }[] = [];
     c.traverse((obj) => {
+      obj.visible = true;
       const mesh = obj as THREE.Mesh;
       if ((mesh as any).isMesh) {
         mesh.castShadow = true;
@@ -187,8 +188,11 @@ function Avatar({ url, targets, heightScale, rotationY, garmentTopColor, garment
           color: new THREE.Color("#9a7f75"),
           roughness: 0.5,
           metalness: 0.05,
+          side: THREE.DoubleSide,
           clearcoat: 0.18,
           clearcoatRoughness: 0.6,
+          emissive: new THREE.Color("#1f1518"),
+          emissiveIntensity: 0.18,
           sheen: 0.4,
           sheenColor: new THREE.Color("#f0b6a8"),
         });
