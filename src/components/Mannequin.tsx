@@ -328,6 +328,7 @@ export function Mannequin({
   gender = "Female",
   bodyType = "Curvy",
   fit = "perfect",
+  rotation = 0,
   product,
   footwear,
   bag,
@@ -370,6 +371,7 @@ export function Mannequin({
               url={url}
               targets={targets}
               heightScale={heightScale}
+              key={url}
               garmentTopColor={slots.top ?? null}
               garmentBottomColor={slots.bottom ?? null}
             />
@@ -383,6 +385,7 @@ export function Mannequin({
             maxDistance={6}
             minPolarAngle={Math.PI / 5}
             maxPolarAngle={Math.PI / 1.7}
+            azimuthAngle={THREE.MathUtils.degToRad(rotation)}
             target={[0, 0.05, 0]}
           />
         </Canvas>
