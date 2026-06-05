@@ -139,16 +139,31 @@ type AvatarProps = {
 };
 
 function Avatar({ url, targets, heightScale, garmentTopColor, garmentBottomColor }: AvatarProps) {
-  const { scene } = useGLTF(url) as unknown as { scene: THREE.Group };
+  const { scene, animations } = useGLTF(url) as unknown as { scene: THREE.Group; animations: THREE.AnimationClip[] };
 
   // Clone so multiple instances / re-renders don't fight each other.
   const cloned = useMemo(() => {
-    const c = scene.clone(true);
+    const c = cloneSkeleton(scene) as THREE.Group;
+    const detectedMorphTargets: { mesh: string; target: string; index: number; defaultValue: number }[] = [];
     c.traverse((obj) => {
       const mesh = obj as THREE.Mesh;
       if ((mesh as any).isMesh) {
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        mesh.frustumCulled = false;
+        if (mesh.morphTargetInfluences) {
+          mesh.morphTargetInfluences.fill(0);
+        }
+        if (mesh.morphTargetDictionary && mesh.morphTargetInfluences) {
+          for (const [target, index] of Object.entries(mesh.morphTargetDictionary)) {
+            detectedMorphTargets.push({
+              mesh: mesh.name || "Unnamed mesh",
+              target,
+              index,
+              defaultValue: mesh.morphTargetInfluences[index] ?? 0,
+            });
+          }
+        }
         // Premium matte dark skin material
         const baseMat = new THREE.MeshPhysicalMaterial({
           color: new THREE.Color("#1d1a24"),
@@ -162,8 +177,22 @@ function Avatar({ url, targets, heightScale, garmentTopColor, garmentBottomColor
         mesh.material = baseMat;
       }
     });
+    c.updateMatrixWorld(true);
+    console.info("[SmartFit Avatar Debug]", {
+      avatarUrl: url,
+      genderToAvatarMapping: {
+        Female: FEMALE_URL,
+        Male: MALE_URL,
+        Unisex: FEMALE_URL,
+      },
+      bodyTypeToMorphMapping: BODY_TYPE_TO_MORPH_MAPPING,
+      defaultState: DEFAULT_MORPH_STATE,
+      detectedMorphTargets,
+      animations: animations.map((clip) => clip.name),
+      pose: "Imported skeleton bind pose; no procedural pose deformation applied.",
+    });
     return c;
-  }, [scene]);
+  }, [scene, animations, url]);
 
   // Build garment overlay meshes that share the morph-targeted geometry.
   const overlays = useMemo(() => {
