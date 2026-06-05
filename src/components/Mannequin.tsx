@@ -327,7 +327,7 @@ export function Mannequin({
   height = 168,
   weight = 60,
   gender = "Female",
-  bodyType = "Curvy",
+  bodyType = "Regular",
   fit = "perfect",
   rotation = 0,
   product,
