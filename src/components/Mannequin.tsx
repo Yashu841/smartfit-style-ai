@@ -134,11 +134,12 @@ type AvatarProps = {
   url: string;
   targets: MorphTargets;
   heightScale: number;
+  rotationY: number;
   garmentTopColor?: string | null;
   garmentBottomColor?: string | null;
 };
 
-function Avatar({ url, targets, heightScale, garmentTopColor, garmentBottomColor }: AvatarProps) {
+function Avatar({ url, targets, heightScale, rotationY, garmentTopColor, garmentBottomColor }: AvatarProps) {
   const { scene, animations } = useGLTF(url) as unknown as { scene: THREE.Group; animations: THREE.AnimationClip[] };
 
   // Clone so multiple instances / re-renders don't fight each other.
@@ -298,7 +299,7 @@ function Avatar({ url, targets, heightScale, garmentTopColor, garmentBottomColor
   // Keep that native transform, only scale to fitting-room size.
   const baseScale = 0.11 * heightScale;
   return (
-    <group ref={groupRef} position={[0, -0.86, -0.05]} scale={baseScale}>
+    <group ref={groupRef} position={[0, -0.86, -0.05]} rotation={[0, rotationY, 0]} scale={baseScale}>
       <primitive object={cloned} />
     </group>
   );
@@ -371,6 +372,7 @@ export function Mannequin({
               url={url}
               targets={targets}
               heightScale={heightScale}
+              rotationY={THREE.MathUtils.degToRad(rotation)}
               key={url}
               garmentTopColor={slots.top ?? null}
               garmentBottomColor={slots.bottom ?? null}
@@ -385,7 +387,6 @@ export function Mannequin({
             maxDistance={6}
             minPolarAngle={Math.PI / 5}
             maxPolarAngle={Math.PI / 1.7}
-            azimuthAngle={THREE.MathUtils.degToRad(rotation)}
             target={[0, 0.05, 0]}
           />
         </Canvas>
