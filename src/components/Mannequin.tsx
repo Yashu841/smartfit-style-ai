@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { Bounds, ContactShadows, Environment, OrbitControls, useGLTF } from "@react-three/drei";
+import { ContactShadows, Environment, OrbitControls, useGLTF } from "@react-three/drei";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
 import type { Product } from "@/lib/catalog";
@@ -317,7 +317,7 @@ function Avatar({ url, targets, heightScale, rotationY, garmentTopColor, garment
   // The uploaded GLBs already contain their own upright node rotation.
   // Keep that native transform, normalize from the actual source bounds.
   return (
-    <group ref={groupRef} position={[0, -0.93, 0]} rotation={[0, rotationY, 0]} scale={normalizedTransform.scale}>
+    <group ref={groupRef} position={[0, -0.95, 0]} rotation={[0, rotationY, 0]} scale={normalizedTransform.scale * 1.35}>
       <primitive object={cloned} position={normalizedTransform.offset.toArray()} />
     </group>
   );
@@ -386,17 +386,15 @@ export function Mannequin({
           <directionalLight position={[0, 1.2, -2.5]} intensity={0.6} color="#ec4f8a" />
           <spotLight position={[0, 3.2, 1.8]} intensity={0.9} angle={0.55} penumbra={1} color="#ffffff" />
           <Suspense fallback={null}>
-            <Bounds fit clip observe margin={1.18}>
-              <Avatar
-                url={url}
-                targets={targets}
-                heightScale={heightScale}
-                rotationY={THREE.MathUtils.degToRad(rotation)}
-                key={url}
-                garmentTopColor={slots.top ?? null}
-                garmentBottomColor={slots.bottom ?? null}
-              />
-            </Bounds>
+            <Avatar
+              url={url}
+              targets={targets}
+              heightScale={heightScale}
+              rotationY={THREE.MathUtils.degToRad(rotation)}
+              key={url}
+              garmentTopColor={slots.top ?? null}
+              garmentBottomColor={slots.bottom ?? null}
+            />
             <ContactShadows position={[0, -0.9, 0]} opacity={0.7} scale={3.5} blur={2.6} far={1.5} />
             <Environment preset="studio" />
           </Suspense>
