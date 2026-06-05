@@ -151,6 +151,9 @@ function Avatar({ url, targets, heightScale, garmentTopColor, garmentBottomColor
         mesh.castShadow = true;
         mesh.receiveShadow = true;
         mesh.frustumCulled = false;
+        if ((mesh as THREE.SkinnedMesh).isSkinnedMesh) {
+          (mesh as THREE.SkinnedMesh).skeleton.pose();
+        }
         if (mesh.morphTargetInfluences) {
           mesh.morphTargetInfluences.fill(0);
         }
@@ -263,15 +266,8 @@ function Avatar({ url, targets, heightScale, garmentTopColor, garmentBottomColor
       const infl = m.morphTargetInfluences;
       if (!dict || !infl) return;
 
-      const desired: Record<string, number> = {
-        slim: targets.slim ?? 0,
-        athletic: targets.athletic ?? 0,
-        curvy: targets.curvy ?? 0,
-        plusSize: targets.plusSize ?? 0,
-        weight: targets.weight ?? 0,
-      };
       for (const [name, idx] of Object.entries(dict)) {
-        const target = desired[name] ?? 0;
+        const target = morphValueForName(name, targets);
         infl[idx] = THREE.MathUtils.lerp(infl[idx], target, 0.12);
       }
 
