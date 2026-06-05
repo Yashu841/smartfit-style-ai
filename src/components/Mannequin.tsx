@@ -1,6 +1,7 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { ContactShadows, Environment, OrbitControls, useGLTF } from "@react-three/drei";
+import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
 import type { Product } from "@/lib/catalog";
 import femaleAsset from "@/assets/female_avatar.glb.asset.json";
@@ -11,7 +12,7 @@ export const OUTFIT_IMAGE_MAP: Record<string, string> = {};
 
 type Fit = "tight" | "perfect" | "relaxed" | "oversized";
 type Gender = "Female" | "Male" | "Unisex";
-type BodyType = "Slim" | "Athletic" | "Regular" | "Curvy" | "Plus" | "Pear" | "Rectangle";
+type BodyType = "Slim" | "Athletic" | "Regular" | "Curvy" | "Plus" | "Plus Size" | "Pear" | "Rectangle";
 
 export type MannequinProps = {
   height?: number;
@@ -45,13 +46,61 @@ type MorphTargets = {
   weight?: number;
 };
 
+const DEFAULT_MORPH_STATE: Required<MorphTargets> = {
+  weight: 0,
+  slim: 0,
+  athletic: 0,
+  curvy: 0,
+  plusSize: 0,
+};
+
+const BODY_TYPE_TO_MORPH_MAPPING: Record<string, string | null> = {
+  "Female:Slim": "slim",
+  "Female:Athletic": "athletic",
+  "Female:Curvy": "curvy",
+  "Female:Plus Size": "plusSize",
+  "Female:Plus": "plusSize",
+  "Male:Slim": "slim",
+  "Male:Athletic": "athletic",
+  "Male:Plus Size": "plusSize",
+  "Male:Plus": "plusSize",
+  "Unisex:Slim": "slim",
+  "Unisex:Athletic": "athletic",
+  "Unisex:Curvy": "curvy",
+  "Unisex:Plus Size": "plusSize",
+  "Unisex:Plus": "plusSize",
+  Regular: null,
+  Pear: "curvy",
+  Rectangle: "slim",
+};
+
+const MORPH_ALIASES: Record<keyof Required<MorphTargets>, string[]> = {
+  weight: ["weight", "bodyweight", "body_weight", "heavy"],
+  slim: ["slim", "thin", "lean"],
+  athletic: ["athletic", "muscular", "sport"],
+  curvy: ["curvy", "curve", "pear"],
+  plusSize: ["plussize", "plus_size", "plus size", "plus", "large"],
+};
+
+function normalizeMorphName(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function morphValueForName(name: string, targets: MorphTargets) {
+  const normalized = normalizeMorphName(name);
+  for (const [key, aliases] of Object.entries(MORPH_ALIASES) as [keyof Required<MorphTargets>, string[]][]) {
+    if (aliases.some((alias) => normalizeMorphName(alias) === normalized)) return targets[key] ?? 0;
+  }
+  return 0;
+}
+
 function targetsFor(
   weight: number,
   gender: Gender,
   bodyType: BodyType,
 ): MorphTargets {
-  // Weight morph: 50kg → 0, 110kg → 1, clamped
-  const weightMorph = Math.max(0, Math.min(1, (weight - 55) / 55));
+  // Weight morph: neutral fitting-room default (60kg) → 0, 150kg → 1, clamped.
+  const weightMorph = Math.max(0, Math.min(1, (weight - 60) / 90));
 
   const t: MorphTargets = { weight: weightMorph };
 
@@ -65,10 +114,9 @@ function targetsFor(
       break;
     case "Curvy":
     case "Pear":
-      // 'curvy' exists on female; on male we approximate with athletic blend
-      if (gender === "Male") t.athletic = 0.6;
-      else t.curvy = 1;
+      if (gender !== "Male") t.curvy = 1;
       break;
+    case "Plus Size":
     case "Plus":
       t.plusSize = 1;
       break;
@@ -86,36 +134,92 @@ type AvatarProps = {
   url: string;
   targets: MorphTargets;
   heightScale: number;
+  rotationY: number;
   garmentTopColor?: string | null;
   garmentBottomColor?: string | null;
 };
 
-function Avatar({ url, targets, heightScale, garmentTopColor, garmentBottomColor }: AvatarProps) {
-  const { scene } = useGLTF(url) as unknown as { scene: THREE.Group };
+function Avatar({ url, targets, heightScale, rotationY, garmentTopColor, garmentBottomColor }: AvatarProps) {
+  const { scene, animations } = useGLTF(url) as unknown as { scene: THREE.Group; animations: THREE.AnimationClip[] };
+  const normalizedTransform = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(scene);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+    const modelHeight = Math.max(size.y, size.x, size.z, 1);
+    return {
+      scale: (1.95 * heightScale) / modelHeight,
+      offset: new THREE.Vector3(-center.x, -box.min.y, -center.z),
+      sourceBounds: {
+        min: box.min.toArray(),
+        max: box.max.toArray(),
+        size: size.toArray(),
+      },
+    };
+  }, [scene, heightScale]);
 
   // Clone so multiple instances / re-renders don't fight each other.
   const cloned = useMemo(() => {
-    const c = scene.clone(true);
+    const c = cloneSkeleton(scene) as THREE.Group;
+    const detectedMorphTargets: { mesh: string; target: string; index: number; defaultValue: number }[] = [];
     c.traverse((obj) => {
+      obj.visible = true;
       const mesh = obj as THREE.Mesh;
       if ((mesh as any).isMesh) {
+        if (mesh.name.toLowerCase().includes("high-poly")) {
+          mesh.visible = false;
+          return;
+        }
         mesh.castShadow = true;
         mesh.receiveShadow = true;
+        mesh.frustumCulled = false;
+        if (mesh.morphTargetInfluences) {
+          mesh.morphTargetInfluences.fill(0);
+        }
+        if (mesh.morphTargetDictionary && mesh.morphTargetInfluences) {
+          for (const [target, index] of Object.entries(mesh.morphTargetDictionary)) {
+            detectedMorphTargets.push({
+              mesh: mesh.name || "Unnamed mesh",
+              target,
+              index,
+              defaultValue: mesh.morphTargetInfluences[index] ?? 0,
+            });
+          }
+        }
         // Premium matte dark skin material
         const baseMat = new THREE.MeshPhysicalMaterial({
-          color: new THREE.Color("#1d1a24"),
-          roughness: 0.55,
+          color: new THREE.Color("#9a7f75"),
+          roughness: 0.5,
           metalness: 0.05,
-          clearcoat: 0.25,
+          side: THREE.DoubleSide,
+          clearcoat: 0.18,
           clearcoatRoughness: 0.6,
+          emissive: new THREE.Color("#1f1518"),
+          emissiveIntensity: 0.18,
           sheen: 0.4,
-          sheenColor: new THREE.Color("#3a2a44"),
+          sheenColor: new THREE.Color("#f0b6a8"),
         });
         mesh.material = baseMat;
       }
     });
+    c.updateMatrixWorld(true);
+    console.info("[SmartFit Avatar Debug]", {
+      avatarUrl: url,
+      genderToAvatarMapping: {
+        Female: FEMALE_URL,
+        Male: MALE_URL,
+        Unisex: FEMALE_URL,
+      },
+      bodyTypeToMorphMapping: BODY_TYPE_TO_MORPH_MAPPING,
+      defaultState: DEFAULT_MORPH_STATE,
+      detectedMorphTargets,
+      animations: animations.map((clip) => clip.name),
+      sourceBounds: normalizedTransform.sourceBounds,
+      pose: "Imported skeleton bind pose; no procedural pose deformation applied.",
+    });
     return c;
-  }, [scene]);
+  }, [scene, animations, url, normalizedTransform.sourceBounds]);
 
   // Build garment overlay meshes that share the morph-targeted geometry.
   const overlays = useMemo(() => {
@@ -186,15 +290,8 @@ function Avatar({ url, targets, heightScale, garmentTopColor, garmentBottomColor
       const infl = m.morphTargetInfluences;
       if (!dict || !infl) return;
 
-      const desired: Record<string, number> = {
-        slim: targets.slim ?? 0,
-        athletic: targets.athletic ?? 0,
-        curvy: targets.curvy ?? 0,
-        plusSize: targets.plusSize ?? 0,
-        weight: targets.weight ?? 0,
-      };
       for (const [name, idx] of Object.entries(dict)) {
-        const target = desired[name] ?? 0;
+        const target = morphValueForName(name, targets);
         infl[idx] = THREE.MathUtils.lerp(infl[idx], target, 0.12);
       }
 
@@ -222,11 +319,10 @@ function Avatar({ url, targets, heightScale, garmentTopColor, garmentBottomColor
   }, [overlays, garmentTopColor, garmentBottomColor]);
 
   // The uploaded GLBs already contain their own upright node rotation.
-  // Keep that native transform, only scale to fitting-room size.
-  const baseScale = 0.11 * heightScale;
+  // Keep that native transform, normalize from the actual source bounds.
   return (
-    <group ref={groupRef} position={[0, -0.86, -0.05]} scale={baseScale}>
-      <primitive object={cloned} />
+    <group ref={groupRef} position={[0, -0.92, 0]} rotation={[0, rotationY, 0]} scale={normalizedTransform.scale * 0.86}>
+      <primitive object={cloned} position={normalizedTransform.offset.toArray()} />
     </group>
   );
 }
@@ -253,8 +349,9 @@ export function Mannequin({
   height = 168,
   weight = 60,
   gender = "Female",
-  bodyType = "Curvy",
+  bodyType = "Regular",
   fit = "perfect",
+  rotation = 0,
   product,
   footwear,
   bag,
@@ -271,21 +368,18 @@ export function Mannequin({
     [height],
   );
   const slots = useMemo(() => garmentSlots(product), [product]);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
 
   return (
     <div className="relative w-full aspect-[3/4] rounded-3xl overflow-hidden bg-gradient-to-b from-[#1a1622] via-[#0f0d18] to-[#080610] border border-white/5 shadow-2xl">
-      {mounted && (
-        <Canvas
-          shadows
-          dpr={[1, 2]}
-          camera={{ position: [0, 0.1, 3.2], fov: 32 }}
-          gl={{ antialias: true, alpha: true, localClippingEnabled: true }}
-          onCreated={({ gl }) => {
-            gl.localClippingEnabled = true;
-          }}
-        >
+      <Canvas
+        shadows
+        dpr={[1, 2]}
+        camera={{ position: [0, 0.1, 3.2], fov: 32 }}
+        gl={{ antialias: true, alpha: true, localClippingEnabled: true }}
+        onCreated={({ gl }) => {
+          gl.localClippingEnabled = true;
+        }}
+      >
           <color attach="background" args={["#0f0d18"]} />
           <ambientLight intensity={0.45} />
           <directionalLight position={[2, 3, 2]} intensity={1.1} castShadow shadow-mapSize={[1024, 1024]} />
@@ -297,6 +391,8 @@ export function Mannequin({
               url={url}
               targets={targets}
               heightScale={heightScale}
+              rotationY={THREE.MathUtils.degToRad(rotation)}
+              key={url}
               garmentTopColor={slots.top ?? null}
               garmentBottomColor={slots.bottom ?? null}
             />
@@ -312,8 +408,7 @@ export function Mannequin({
             maxPolarAngle={Math.PI / 1.7}
             target={[0, 0.05, 0]}
           />
-        </Canvas>
-      )}
+      </Canvas>
 
       {/* HUD */}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3 text-[10px] uppercase tracking-widest text-white/70">

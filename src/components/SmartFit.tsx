@@ -37,7 +37,7 @@ function getUserId(): string {
 type Step = "hero" | "form" | "processing" | "results";
 type Fit = "tight" | "perfect" | "relaxed" | "oversized";
 type Gender = "Female" | "Male" | "Unisex";
-type BodyType = "Slim" | "Athletic" | "Regular" | "Curvy" | "Plus" | "Pear" | "Rectangle";
+type BodyType = "Slim" | "Athletic" | "Regular" | "Curvy" | "Plus Size" | "Pear" | "Rectangle";
 type FitPref = "Slim" | "Regular" | "Relaxed" | "Oversized";
 
 type Profile = {
@@ -83,7 +83,7 @@ function localFallback(p: Profile): Recommendation {
   else idx = 5;
   if (p.fitPreference === "Oversized") idx = Math.min(5, idx + 1);
   if (p.fitPreference === "Slim") idx = Math.max(0, idx - 1);
-  if (p.bodyType === "Curvy" || p.bodyType === "Plus") idx = Math.min(5, idx + 1);
+  if (p.bodyType === "Curvy" || p.bodyType === "Plus Size") idx = Math.min(5, idx + 1);
   const fit = fitFromPref(p.fitPreference);
   const confidence = 78 + Math.round(Math.random() * 17);
   return {
@@ -134,7 +134,7 @@ export function SmartFit() {
   const [profile, setProfile] = useState<Profile>({
     height: 168,
     weight: 60,
-    bodyType: "Curvy",
+    bodyType: "Regular",
     gender: "Female",
     fitPreference: "Regular",
     productId: "zara-pink-dress",
@@ -294,7 +294,7 @@ function Hero({ onStart }: { onStart: () => void }) {
       <div className="relative animate-fade-in">
         <div className="absolute inset-0 -z-10 grid-bg opacity-40 [mask-image:radial-gradient(circle_at_center,black,transparent_70%)]" />
         <Mannequin
-          gender="Female" bodyType="Curvy" height={168} weight={60}
+          gender="Female" bodyType="Regular" height={168} weight={60}
           fit="perfect" product={demoProduct}
           footwear={findById("acc-heels-nude")}
           bag={findById("acc-bag-rose")}
@@ -395,7 +395,7 @@ function FormScreen({
             options={["Female", "Male", "Unisex"] as Gender[]}
             value={profile.gender} onChange={(v) => update("gender", v)} />
           <PillGroup label="Body Type"
-            options={["Slim", "Athletic", "Regular", "Curvy", "Pear", "Rectangle", "Plus"] as BodyType[]}
+            options={["Slim", "Athletic", "Regular", "Curvy", "Pear", "Rectangle", "Plus Size"] as BodyType[]}
             value={profile.bodyType} onChange={(v) => update("bodyType", v)} />
           <PillGroup label="Preferred Fit"
             options={["Slim", "Regular", "Relaxed", "Oversized"] as FitPref[]}
