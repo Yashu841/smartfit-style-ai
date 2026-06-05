@@ -141,6 +141,23 @@ type AvatarProps = {
 
 function Avatar({ url, targets, heightScale, rotationY, garmentTopColor, garmentBottomColor }: AvatarProps) {
   const { scene, animations } = useGLTF(url) as unknown as { scene: THREE.Group; animations: THREE.AnimationClip[] };
+  const normalizedTransform = useMemo(() => {
+    const box = new THREE.Box3().setFromObject(scene);
+    const size = new THREE.Vector3();
+    const center = new THREE.Vector3();
+    box.getSize(size);
+    box.getCenter(center);
+    const modelHeight = Math.max(size.y, size.x, size.z, 1);
+    return {
+      scale: (1.95 * heightScale) / modelHeight,
+      offset: new THREE.Vector3(-center.x, -box.min.y, -center.z),
+      sourceBounds: {
+        min: box.min.toArray(),
+        max: box.max.toArray(),
+        size: size.toArray(),
+      },
+    };
+  }, [scene, heightScale]);
 
   // Clone so multiple instances / re-renders don't fight each other.
   const cloned = useMemo(() => {
@@ -193,10 +210,11 @@ function Avatar({ url, targets, heightScale, rotationY, garmentTopColor, garment
       defaultState: DEFAULT_MORPH_STATE,
       detectedMorphTargets,
       animations: animations.map((clip) => clip.name),
+      sourceBounds: normalizedTransform.sourceBounds,
       pose: "Imported skeleton bind pose; no procedural pose deformation applied.",
     });
     return c;
-  }, [scene, animations, url]);
+  }, [scene, animations, url, normalizedTransform.sourceBounds]);
 
   // Build garment overlay meshes that share the morph-targeted geometry.
   const overlays = useMemo(() => {
@@ -296,11 +314,10 @@ function Avatar({ url, targets, heightScale, rotationY, garmentTopColor, garment
   }, [overlays, garmentTopColor, garmentBottomColor]);
 
   // The uploaded GLBs already contain their own upright node rotation.
-  // Keep that native transform, only scale to fitting-room size.
-  const baseScale = 0.11 * heightScale;
+  // Keep that native transform, normalize from the actual source bounds.
   return (
-    <group ref={groupRef} position={[0, -0.86, -0.05]} rotation={[0, rotationY, 0]} scale={baseScale}>
-      <primitive object={cloned} />
+    <group ref={groupRef} position={[0, -0.93, 0]} rotation={[0, rotationY, 0]} scale={normalizedTransform.scale}>
+      <primitive object={cloned} position={normalizedTransform.offset.toArray()} />
     </group>
   );
 }
