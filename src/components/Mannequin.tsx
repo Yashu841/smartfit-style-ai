@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { ContactShadows, Environment, OrbitControls, useGLTF } from "@react-three/drei";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
@@ -364,21 +364,18 @@ export function Mannequin({
     [height],
   );
   const slots = useMemo(() => garmentSlots(product), [product]);
-  const [mounted, setMounted] = useState(false);
-  useEffect(() => setMounted(true), []);
 
   return (
     <div className="relative w-full aspect-[3/4] rounded-3xl overflow-hidden bg-gradient-to-b from-[#1a1622] via-[#0f0d18] to-[#080610] border border-white/5 shadow-2xl">
-      {mounted && (
-        <Canvas
-          shadows
-          dpr={[1, 2]}
-          camera={{ position: [0, 0.1, 3.2], fov: 32 }}
-          gl={{ antialias: true, alpha: true, localClippingEnabled: true }}
-          onCreated={({ gl }) => {
-            gl.localClippingEnabled = true;
-          }}
-        >
+      <Canvas
+        shadows
+        dpr={[1, 2]}
+        camera={{ position: [0, 0.1, 3.2], fov: 32 }}
+        gl={{ antialias: true, alpha: true, localClippingEnabled: true }}
+        onCreated={({ gl }) => {
+          gl.localClippingEnabled = true;
+        }}
+      >
           <color attach="background" args={["#0f0d18"]} />
           <ambientLight intensity={0.45} />
           <directionalLight position={[2, 3, 2]} intensity={1.1} castShadow shadow-mapSize={[1024, 1024]} />
@@ -411,8 +408,7 @@ export function Mannequin({
             maxPolarAngle={Math.PI / 1.7}
             target={[0, 0.05, 0]}
           />
-        </Canvas>
-      )}
+      </Canvas>
 
       {/* HUD */}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3 text-[10px] uppercase tracking-widest text-white/70">
