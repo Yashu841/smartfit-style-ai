@@ -1,6 +1,7 @@
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
 import { ContactShadows, Environment, OrbitControls, useGLTF } from "@react-three/drei";
+import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
 import type { Product } from "@/lib/catalog";
 import femaleAsset from "@/assets/female_avatar.glb.asset.json";
@@ -11,7 +12,7 @@ export const OUTFIT_IMAGE_MAP: Record<string, string> = {};
 
 type Fit = "tight" | "perfect" | "relaxed" | "oversized";
 type Gender = "Female" | "Male" | "Unisex";
-type BodyType = "Slim" | "Athletic" | "Regular" | "Curvy" | "Plus" | "Pear" | "Rectangle";
+type BodyType = "Slim" | "Athletic" | "Regular" | "Curvy" | "Plus" | "Plus Size" | "Pear" | "Rectangle";
 
 export type MannequinProps = {
   height?: number;
@@ -45,13 +46,61 @@ type MorphTargets = {
   weight?: number;
 };
 
+const DEFAULT_MORPH_STATE: Required<MorphTargets> = {
+  weight: 0,
+  slim: 0,
+  athletic: 0,
+  curvy: 0,
+  plusSize: 0,
+};
+
+const BODY_TYPE_TO_MORPH_MAPPING: Record<string, string | null> = {
+  "Female:Slim": "slim",
+  "Female:Athletic": "athletic",
+  "Female:Curvy": "curvy",
+  "Female:Plus Size": "plusSize",
+  "Female:Plus": "plusSize",
+  "Male:Slim": "slim",
+  "Male:Athletic": "athletic",
+  "Male:Plus Size": "plusSize",
+  "Male:Plus": "plusSize",
+  "Unisex:Slim": "slim",
+  "Unisex:Athletic": "athletic",
+  "Unisex:Curvy": "curvy",
+  "Unisex:Plus Size": "plusSize",
+  "Unisex:Plus": "plusSize",
+  Regular: null,
+  Pear: "curvy",
+  Rectangle: "slim",
+};
+
+const MORPH_ALIASES: Record<keyof Required<MorphTargets>, string[]> = {
+  weight: ["weight", "bodyweight", "body_weight", "heavy"],
+  slim: ["slim", "thin", "lean"],
+  athletic: ["athletic", "muscular", "sport"],
+  curvy: ["curvy", "curve", "pear"],
+  plusSize: ["plussize", "plus_size", "plus size", "plus", "large"],
+};
+
+function normalizeMorphName(name: string) {
+  return name.toLowerCase().replace(/[^a-z0-9]/g, "");
+}
+
+function morphValueForName(name: string, targets: MorphTargets) {
+  const normalized = normalizeMorphName(name);
+  for (const [key, aliases] of Object.entries(MORPH_ALIASES) as [keyof Required<MorphTargets>, string[]][]) {
+    if (aliases.some((alias) => normalizeMorphName(alias) === normalized)) return targets[key] ?? 0;
+  }
+  return 0;
+}
+
 function targetsFor(
   weight: number,
   gender: Gender,
   bodyType: BodyType,
 ): MorphTargets {
-  // Weight morph: 50kg → 0, 110kg → 1, clamped
-  const weightMorph = Math.max(0, Math.min(1, (weight - 55) / 55));
+  // Weight morph: neutral fitting-room default (60kg) → 0, 150kg → 1, clamped.
+  const weightMorph = Math.max(0, Math.min(1, (weight - 60) / 90));
 
   const t: MorphTargets = { weight: weightMorph };
 
@@ -65,10 +114,9 @@ function targetsFor(
       break;
     case "Curvy":
     case "Pear":
-      // 'curvy' exists on female; on male we approximate with athletic blend
-      if (gender === "Male") t.athletic = 0.6;
-      else t.curvy = 1;
+      if (gender !== "Male") t.curvy = 1;
       break;
+    case "Plus Size":
     case "Plus":
       t.plusSize = 1;
       break;
