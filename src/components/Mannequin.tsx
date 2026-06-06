@@ -440,4 +440,71 @@ export function Mannequin({
   );
 }
 
+/* ──────────────── Garment silhouette overlay ──────────────── */
+
+function GarmentOverlay({ product }: { product: Product }) {
+  const c = product.color;
+  const accent = product.accent ?? product.color;
+  const cat = product.category;
+  const isDress = cat === "Dress";
+  const isBottom = ["Jeans", "Trousers", "Skirt"].includes(cat);
+  const isTop = ["Top", "Shirt", "T-Shirt", "Blazer", "Jacket", "Hoodie"].includes(cat);
+  const isFootwear = ["Heels", "Sneakers", "Boots"].includes(cat);
+  const isAccessory = ["Handbag", "Sunglasses", "Belt"].includes(cat);
+  if (isFootwear || isAccessory) return null;
+
+  // Positions tuned to the avatar's torso/hip region.
+  const baseStyle: React.CSSProperties = {
+    background: `linear-gradient(160deg, ${accent} 0%, ${c} 55%, ${c} 100%)`,
+    boxShadow: `0 12px 40px -8px ${c}99, inset 0 2px 12px rgba(255,255,255,0.18), inset 0 -8px 18px rgba(0,0,0,0.35)`,
+    border: `1px solid rgba(255,255,255,0.12)`,
+  };
+
+  if (isDress) {
+    return (
+      <div className="pointer-events-none absolute left-1/2 -translate-x-1/2" style={{ top: "30%", width: "34%", height: "46%" }}>
+        <div
+          className="h-full w-full"
+          style={{
+            ...baseStyle,
+            clipPath: "polygon(28% 0, 72% 0, 82% 14%, 100% 100%, 0 100%, 18% 14%)",
+            transition: "all 400ms cubic-bezier(.4,0,.2,1)",
+          }}
+        />
+      </div>
+    );
+  }
+  if (isTop) {
+    return (
+      <div className="pointer-events-none absolute left-1/2 -translate-x-1/2" style={{ top: "30%", width: "36%", height: "22%" }}>
+        <div
+          className="h-full w-full"
+          style={{
+            ...baseStyle,
+            clipPath: "polygon(20% 0, 80% 0, 100% 30%, 90% 100%, 10% 100%, 0 30%)",
+            transition: "all 400ms cubic-bezier(.4,0,.2,1)",
+          }}
+        />
+      </div>
+    );
+  }
+  if (isBottom) {
+    return (
+      <div className="pointer-events-none absolute left-1/2 -translate-x-1/2" style={{ top: "52%", width: "30%", height: "28%" }}>
+        <div
+          className="h-full w-full"
+          style={{
+            ...baseStyle,
+            clipPath: cat === "Skirt"
+              ? "polygon(15% 0, 85% 0, 100% 100%, 0 100%)"
+              : "polygon(20% 0, 80% 0, 90% 100%, 60% 100%, 50% 25%, 40% 100%, 10% 100%)",
+            transition: "all 400ms cubic-bezier(.4,0,.2,1)",
+          }}
+        />
+      </div>
+    );
+  }
+  return null;
+}
+
 export default Mannequin;
