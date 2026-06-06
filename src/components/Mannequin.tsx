@@ -99,10 +99,8 @@ function targetsFor(
   gender: Gender,
   bodyType: BodyType,
 ): MorphTargets {
-  // Weight morph: neutral fitting-room default (60kg) → 0, 150kg → 1, clamped.
-  const weightMorph = Math.max(0, Math.min(1, (weight - 60) / 90));
-
-  const t: MorphTargets = { weight: weightMorph };
+  // Reset all morphs to 0 and apply ONLY ONE at a time.
+  const t: MorphTargets = { weight: 0, slim: 0, athletic: 0, curvy: 0, plusSize: 0 };
 
   switch (bodyType) {
     case "Slim":
@@ -114,7 +112,7 @@ function targetsFor(
       break;
     case "Curvy":
     case "Pear":
-      if (gender !== "Male") t.curvy = 1;
+      t.curvy = 1;
       break;
     case "Plus Size":
     case "Plus":
@@ -122,7 +120,10 @@ function targetsFor(
       break;
     case "Regular":
     default:
-      // neutral baseline
+      if (gender === "Male") {
+        // Male Regular maps weight slider → weight morph (60kg → 0, 120kg → 1).
+        t.weight = Math.max(0, Math.min(1, (weight - 60) / 60));
+      }
       break;
   }
   return t;
