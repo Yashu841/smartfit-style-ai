@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useMemo, useRef } from "react";
 import { Canvas, useFrame } from "@react-three/fiber";
-import { ContactShadows, Environment, OrbitControls, useGLTF } from "@react-three/drei";
+import { ContactShadows, OrbitControls, useGLTF } from "@react-three/drei";
 import { clone as cloneSkeleton } from "three/examples/jsm/utils/SkeletonUtils.js";
 import * as THREE from "three";
 import type { Product } from "@/lib/catalog";
@@ -99,10 +99,8 @@ function targetsFor(
   gender: Gender,
   bodyType: BodyType,
 ): MorphTargets {
-  // Weight morph: neutral fitting-room default (60kg) → 0, 150kg → 1, clamped.
-  const weightMorph = Math.max(0, Math.min(1, (weight - 60) / 90));
-
-  const t: MorphTargets = { weight: weightMorph };
+  // Reset all morphs to 0 and apply ONLY ONE at a time.
+  const t: MorphTargets = { weight: 0, slim: 0, athletic: 0, curvy: 0, plusSize: 0 };
 
   switch (bodyType) {
     case "Slim":
@@ -114,7 +112,7 @@ function targetsFor(
       break;
     case "Curvy":
     case "Pear":
-      if (gender !== "Male") t.curvy = 1;
+      t.curvy = 1;
       break;
     case "Plus Size":
     case "Plus":
@@ -122,7 +120,10 @@ function targetsFor(
       break;
     case "Regular":
     default:
-      // neutral baseline
+      if (gender === "Male") {
+        // Male Regular maps weight slider → weight morph (60kg → 0, 120kg → 1).
+        t.weight = Math.max(0, Math.min(1, (weight - 60) / 60));
+      }
       break;
   }
   return t;
@@ -318,10 +319,11 @@ function Avatar({ url, targets, heightScale, rotationY, garmentTopColor, garment
     }
   }, [overlays, garmentTopColor, garmentBottomColor]);
 
-  // The uploaded GLBs already contain their own upright node rotation.
-  // Keep that native transform, normalize from the actual source bounds.
+  // Weight scaling: 40kg → 0.92, 60kg → 1.0, 120kg → 1.18 on X/Z only.
+  const bodyScaleXZ = THREE.MathUtils.clamp(1 + (((targets.weight ?? 0) || 0) * 0.18) + ((targets.curvy ?? 0) * 0.06) + ((targets.plusSize ?? 0) * 0.14) - ((targets.slim ?? 0) * 0.05), 0.9, 1.25);
+  const s = normalizedTransform.scale * 0.86;
   return (
-    <group ref={groupRef} position={[0, -0.92, 0]} rotation={[0, rotationY, 0]} scale={normalizedTransform.scale * 0.86}>
+    <group ref={groupRef} position={[0, -0.92, 0]} rotation={[0, rotationY, 0]} scale={[s * bodyScaleXZ, s, s * bodyScaleXZ]}>
       <primitive object={cloned} position={normalizedTransform.offset.toArray()} />
     </group>
   );
@@ -397,7 +399,6 @@ export function Mannequin({
               garmentBottomColor={slots.bottom ?? null}
             />
             <ContactShadows position={[0, -0.9, 0]} opacity={0.7} scale={3.5} blur={2.6} far={1.5} />
-            <Environment preset="studio" />
           </Suspense>
           <OrbitControls
             enablePan
@@ -409,6 +410,8 @@ export function Mannequin({
             target={[0, 0.05, 0]}
           />
       </Canvas>
+
+      {product && <GarmentOverlay product={product} />}
 
       {/* HUD */}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3 text-[10px] uppercase tracking-widest text-white/70">
@@ -435,6 +438,73 @@ export function Mannequin({
       )}
     </div>
   );
+}
+
+/* ──────────────── Garment silhouette overlay ──────────────── */
+
+function GarmentOverlay({ product }: { product: Product }) {
+  const c = product.color;
+  const accent = product.accent ?? product.color;
+  const cat = product.category;
+  const isDress = cat === "Dress";
+  const isBottom = ["Jeans", "Trousers", "Skirt"].includes(cat);
+  const isTop = ["Top", "Shirt", "T-Shirt", "Blazer", "Jacket", "Hoodie"].includes(cat);
+  const isFootwear = ["Heels", "Sneakers", "Boots"].includes(cat);
+  const isAccessory = ["Handbag", "Sunglasses", "Belt"].includes(cat);
+  if (isFootwear || isAccessory) return null;
+
+  // Positions tuned to the avatar's torso/hip region.
+  const baseStyle: React.CSSProperties = {
+    background: `linear-gradient(160deg, ${accent} 0%, ${c} 55%, ${c} 100%)`,
+    boxShadow: `0 12px 40px -8px ${c}99, inset 0 2px 12px rgba(255,255,255,0.18), inset 0 -8px 18px rgba(0,0,0,0.35)`,
+    border: `1px solid rgba(255,255,255,0.12)`,
+  };
+
+  if (isDress) {
+    return (
+      <div className="pointer-events-none absolute left-1/2 -translate-x-1/2" style={{ top: "30%", width: "34%", height: "46%" }}>
+        <div
+          className="h-full w-full"
+          style={{
+            ...baseStyle,
+            clipPath: "polygon(28% 0, 72% 0, 82% 14%, 100% 100%, 0 100%, 18% 14%)",
+            transition: "all 400ms cubic-bezier(.4,0,.2,1)",
+          }}
+        />
+      </div>
+    );
+  }
+  if (isTop) {
+    return (
+      <div className="pointer-events-none absolute left-1/2 -translate-x-1/2" style={{ top: "30%", width: "36%", height: "22%" }}>
+        <div
+          className="h-full w-full"
+          style={{
+            ...baseStyle,
+            clipPath: "polygon(20% 0, 80% 0, 100% 30%, 90% 100%, 10% 100%, 0 30%)",
+            transition: "all 400ms cubic-bezier(.4,0,.2,1)",
+          }}
+        />
+      </div>
+    );
+  }
+  if (isBottom) {
+    return (
+      <div className="pointer-events-none absolute left-1/2 -translate-x-1/2" style={{ top: "52%", width: "30%", height: "28%" }}>
+        <div
+          className="h-full w-full"
+          style={{
+            ...baseStyle,
+            clipPath: cat === "Skirt"
+              ? "polygon(15% 0, 85% 0, 100% 100%, 0 100%)"
+              : "polygon(20% 0, 80% 0, 90% 100%, 60% 100%, 50% 25%, 40% 100%, 10% 100%)",
+            transition: "all 400ms cubic-bezier(.4,0,.2,1)",
+          }}
+        />
+      </div>
+    );
+  }
+  return null;
 }
 
 export default Mannequin;

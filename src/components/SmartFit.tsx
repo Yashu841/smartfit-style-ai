@@ -647,6 +647,48 @@ function Results({
             </div>
           </div>
 
+          {/* Selected garment card */}
+          <div className="glass-strong rounded-2xl p-4 flex items-center gap-4">
+            <div
+              className="h-20 w-20 shrink-0 rounded-xl border border-white/10"
+              style={{
+                background: `radial-gradient(120% 90% at 30% 20%, ${outfit.accent ?? outfit.color}, ${outfit.color} 65%, #0b0b12 110%)`,
+                boxShadow: `0 8px 24px -8px ${outfit.color}88`,
+              }}
+            />
+            <div className="min-w-0 flex-1">
+              <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{outfit.brand}</div>
+              <div className="truncate font-display text-sm font-semibold">{outfit.name}</div>
+              <div className="mt-1 flex items-center gap-2">
+                <span className="rounded-full bg-[var(--color-myntra-glow)]/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-[var(--color-myntra-glow)]">
+                  Recommended size {rec.size}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Fit preview checklist */}
+          <div className="glass rounded-2xl p-4 space-y-2">
+            <div className="flex items-center justify-between text-xs">
+              <span className="uppercase tracking-widest text-muted-foreground">Fit preview</span>
+              <span className="font-semibold text-[var(--color-success)]">
+                {rec.confidence >= 80 ? "High" : rec.confidence >= 60 ? "Medium" : "Low"} confidence
+              </span>
+            </div>
+            {[
+              `Recommended size ${rec.size}`,
+              "Based on your body profile",
+              `Based on ${outfit.brand} ${outfit.category.toLowerCase()}`,
+            ].map((line) => (
+              <div key={line} className="flex items-center gap-2 text-xs text-muted-foreground">
+                <span className="grid h-4 w-4 place-items-center rounded-full bg-[var(--color-success)]/20 text-[10px] text-[var(--color-success)]">✓</span>
+                {line}
+              </div>
+            ))}
+          </div>
+
+
+
           {/* Fit visualization meter */}
           <div className="glass rounded-2xl p-4">
             <div className="mb-2 flex items-center justify-between text-xs">
