@@ -399,7 +399,6 @@ export function Mannequin({
               garmentBottomColor={slots.bottom ?? null}
             />
             <ContactShadows position={[0, -0.9, 0]} opacity={0.7} scale={3.5} blur={2.6} far={1.5} />
-            <Environment preset="studio" />
           </Suspense>
           <OrbitControls
             enablePan
