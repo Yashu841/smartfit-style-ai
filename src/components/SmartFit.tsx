@@ -685,6 +685,9 @@ function Results({
                 {line}
               </div>
             ))}
+          </div>
+
+
 
           {/* Fit visualization meter */}
           <div className="glass rounded-2xl p-4">
