@@ -411,6 +411,8 @@ export function Mannequin({
           />
       </Canvas>
 
+      {product && <GarmentOverlay product={product} />}
+
       {/* HUD */}
       <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3 text-[10px] uppercase tracking-widest text-white/70">
         <span className="rounded-full bg-black/40 px-2 py-0.5 backdrop-blur">{gender} · {bodyType}</span>
