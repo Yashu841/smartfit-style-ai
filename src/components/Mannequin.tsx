@@ -319,10 +319,11 @@ function Avatar({ url, targets, heightScale, rotationY, garmentTopColor, garment
     }
   }, [overlays, garmentTopColor, garmentBottomColor]);
 
-  // The uploaded GLBs already contain their own upright node rotation.
-  // Keep that native transform, normalize from the actual source bounds.
+  // Weight scaling: 40kg → 0.92, 60kg → 1.0, 120kg → 1.18 on X/Z only.
+  const bodyScaleXZ = THREE.MathUtils.clamp(1 + (((targets.weight ?? 0) || 0) * 0.18) + ((targets.curvy ?? 0) * 0.06) + ((targets.plusSize ?? 0) * 0.14) - ((targets.slim ?? 0) * 0.05), 0.9, 1.25);
+  const s = normalizedTransform.scale * 0.86;
   return (
-    <group ref={groupRef} position={[0, -0.92, 0]} rotation={[0, rotationY, 0]} scale={normalizedTransform.scale * 0.86}>
+    <group ref={groupRef} position={[0, -0.92, 0]} rotation={[0, rotationY, 0]} scale={[s * bodyScaleXZ, s, s * bodyScaleXZ]}>
       <primitive object={cloned} position={normalizedTransform.offset.toArray()} />
     </group>
   );
