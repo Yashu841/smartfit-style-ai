@@ -300,6 +300,7 @@ export function Mannequin({
   rotation = 0,
   scanning,
   product,
+  showSkeleton,
 }: MannequinProps) {
   const url = gender === "Male" ? MALE_URL : FEMALE_URL;
   const targets = useMemo(() => targetsFor(weight, gender, bodyType), [weight, gender, bodyType]);
@@ -311,8 +312,8 @@ export function Mannequin({
     () => 0.88 + ((Math.max(140, Math.min(210, height)) - 140) / 70) * 0.24,
     [height],
   );
-  const dressedImage = product ? OUTFIT_IMAGE_MAP[product.id] : undefined;
-  const fallbackBodyImage = !product ? (gender === "Male" ? baseMaleImage : baseFemaleImage) : undefined;
+  const dressedImage = product && !showSkeleton ? OUTFIT_IMAGE_MAP[product.id] : undefined;
+  const fallbackBodyImage = !dressedImage ? (gender === "Male" ? baseMaleImage : baseFemaleImage) : undefined;
   const tryOnImage = dressedImage ?? fallbackBodyImage;
   const tryOnLabel = product ? `${product.brand} ${product.name} on SmartFit avatar` : `${gender} SmartFit avatar`;
 
