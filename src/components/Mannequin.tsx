@@ -6,9 +6,42 @@ import * as THREE from "three";
 import type { Product } from "@/lib/catalog";
 import femaleAsset from "@/assets/female_avatar.glb.asset.json";
 import maleAsset from "@/assets/male_avatar.glb.asset.json";
+import baseFemaleImage from "@/assets/mannequin/base-female.jpg";
+import baseMaleImage from "@/assets/mannequin/base-male.jpg";
+import accJacketCreamImage from "@/assets/mannequin/acc-jacket-cream.jpg";
+import hmBlackMiniImage from "@/assets/mannequin/hm-black-mini.jpg";
+import hmBlazerMImage from "@/assets/mannequin/hm-blazer-m.jpg";
+import hmMiniSkirtImage from "@/assets/mannequin/hm-mini-skirt.jpg";
+import hrxHoodieImage from "@/assets/mannequin/hrx-hoodie.jpg";
+import levis501Image from "@/assets/mannequin/levis-501.jpg";
+import levisMomImage from "@/assets/mannequin/levis-mom.jpg";
+import mangoBlazerImage from "@/assets/mannequin/mango-blazer.jpg";
+import mangoFloralImage from "@/assets/mannequin/mango-floral.jpg";
+import roadsterTeeImage from "@/assets/mannequin/roadster-tee.jpg";
+import zaraBikerImage from "@/assets/mannequin/zara-biker.jpg";
+import zaraOxfordImage from "@/assets/mannequin/zara-oxford.jpg";
+import zaraPinkDressImage from "@/assets/mannequin/zara-pink-dress.jpg";
+import zaraSilkBlouseImage from "@/assets/mannequin/zara-silk-blouse.jpg";
+import zaraTrousersImage from "@/assets/mannequin/zara-trousers.jpg";
 
 // Kept for backwards-compat with SmartFit.tsx import.
-export const OUTFIT_IMAGE_MAP: Record<string, string> = {};
+export const OUTFIT_IMAGE_MAP: Record<string, string> = {
+  "acc-jacket-cream": accJacketCreamImage,
+  "hm-black-mini": hmBlackMiniImage,
+  "hm-blazer-m": hmBlazerMImage,
+  "hm-mini-skirt": hmMiniSkirtImage,
+  "hrx-hoodie": hrxHoodieImage,
+  "levis-501": levis501Image,
+  "levis-mom": levisMomImage,
+  "mango-blazer": mangoBlazerImage,
+  "mango-floral": mangoFloralImage,
+  "roadster-tee": roadsterTeeImage,
+  "zara-biker": zaraBikerImage,
+  "zara-oxford": zaraOxfordImage,
+  "zara-pink-dress": zaraPinkDressImage,
+  "zara-silk-blouse": zaraSilkBlouseImage,
+  "zara-trousers": zaraTrousersImage,
+};
 
 type Fit = "tight" | "perfect" | "relaxed" | "oversized";
 type Gender = "Female" | "Male" | "Unisex";
@@ -63,27 +96,67 @@ function morphValueForName(name: string, targets: MorphTargets): number {
 
 // Reset all to 0, then apply exactly one body type.
 function targetsFor(weight: number, gender: Gender, bodyType: BodyType): MorphTargets {
+  const neutralHeight = gender === "Male" ? 176 : 164;
+  const estimatedBmi = weight / Math.pow(neutralHeight / 100, 2);
+  const weightMorph = THREE.MathUtils.clamp((estimatedBmi - 22) / 16, 0, 0.85);
   const t: MorphTargets = { weight: 0, slim: 0, athletic: 0, curvy: 0, plusSize: 0 };
   switch (bodyType) {
     case "Slim":
     case "Rectangle":
-      t.slim = 1; break;
+      t.slim = 0.9; break;
     case "Athletic":
-      t.athletic = 1; break;
+      t.athletic = 0.9; break;
     case "Curvy":
     case "Pear":
-      t.curvy = 1; break;
+      t.curvy = gender === "Male" ? 0 : 0.9; break;
     case "Plus":
     case "Plus Size":
       t.plusSize = 1; break;
     case "Regular":
     default:
-      if (gender === "Male") {
-        t.weight = Math.max(0, Math.min(1, (weight - 60) / 60));
-      }
       break;
   }
+  t.weight = bodyType === "Slim" ? Math.min(weightMorph, 0.18) : weightMorph;
   return t;
+}
+
+type BodyScales = {
+  avatarWidth: number;
+  avatarDepth: number;
+  imageWidth: number;
+  imageHeight: number;
+  imageLift: number;
+};
+
+function calculateBodyScales(height: number, weight: number, gender: Gender, bodyType: BodyType, fit: Fit): BodyScales {
+  const clampedHeight = THREE.MathUtils.clamp(height, 140, 210);
+  const clampedWeight = THREE.MathUtils.clamp(weight, 35, 150);
+  const bmi = clampedWeight / Math.pow(clampedHeight / 100, 2);
+  const weightWidth = THREE.MathUtils.clamp((bmi - 22) / 18, -0.22, 0.42);
+  const weightDepth = THREE.MathUtils.clamp((bmi - 22) / 22, -0.14, 0.3);
+
+  const typeWidth: Record<BodyType, number> = {
+    Slim: -0.14,
+    Athletic: gender === "Male" ? 0.12 : 0.07,
+    Regular: 0,
+    Curvy: gender === "Male" ? 0.03 : 0.18,
+    Pear: gender === "Male" ? 0.02 : 0.2,
+    Rectangle: -0.05,
+    Plus: 0.3,
+    "Plus Size": 0.3,
+  };
+  const fitEase = fit === "tight" ? -0.03 : fit === "relaxed" ? 0.025 : fit === "oversized" ? 0.06 : 0;
+  const heightVisual = 0.94 + ((clampedHeight - 140) / 70) * 0.16;
+  const bodyWidth = THREE.MathUtils.clamp(1 + weightWidth + (typeWidth[bodyType] ?? 0), 0.74, 1.5);
+  const bodyDepth = THREE.MathUtils.clamp(1 + weightDepth + ((typeWidth[bodyType] ?? 0) * 0.55), 0.82, 1.34);
+
+  return {
+    avatarWidth: bodyWidth,
+    avatarDepth: bodyDepth,
+    imageWidth: THREE.MathUtils.clamp(bodyWidth + fitEase, 0.78, 1.48),
+    imageHeight: THREE.MathUtils.clamp(heightVisual, 0.92, 1.12),
+    imageLift: (heightVisual - 1) * -18,
+  };
 }
 
 /* ──────────────── Avatar ──────────────── */
@@ -92,11 +165,15 @@ function Avatar({
   url,
   targets,
   heightScale,
+  widthScale,
+  depthScale,
   rotationY,
 }: {
   url: string;
   targets: MorphTargets;
   heightScale: number;
+  widthScale: number;
+  depthScale: number;
   rotationY: number;
 }) {
   const { scene } = useGLTF(url) as unknown as { scene: THREE.Group };
@@ -164,9 +241,47 @@ function Avatar({
 
   const groupRef = useRef<THREE.Group>(null);
   return (
-    <group ref={groupRef} position={[0, -0.9, 0]} rotation={[0, rotationY, 0]} scale={scale}>
+    <group
+      ref={groupRef}
+      position={[0, -0.9, 0]}
+      rotation={[0, rotationY, 0]}
+      scale={[scale * widthScale, scale, scale * depthScale]}
+    >
       <primitive object={cloned} position={offset.toArray()} />
     </group>
+  );
+}
+
+function DressedTryOnLayer({
+  image,
+  label,
+  scales,
+  scanning,
+}: {
+  image: string;
+  label: string;
+  scales: BodyScales;
+  scanning?: boolean;
+}) {
+  return (
+    <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center overflow-hidden">
+      <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_42%,rgba(236,79,138,0.18),transparent_46%)]" />
+      <img
+        src={image}
+        alt={label}
+        loading="eager"
+        decoding="async"
+        className="relative h-full w-full object-cover object-center drop-shadow-[0_30px_45px_rgba(0,0,0,0.55)] transition-transform duration-500 ease-out"
+        style={{
+          transform: `translateY(${scales.imageLift}px) scaleX(${scales.imageWidth}) scaleY(${scales.imageHeight})`,
+          transformOrigin: "center bottom",
+        }}
+      />
+      <div className="absolute inset-x-8 bottom-7 h-10 rounded-[999px] bg-black/35 blur-xl" />
+      {scanning && (
+        <div className="absolute inset-x-8 top-1/4 h-px animate-pulse bg-gradient-to-r from-transparent via-white/70 to-transparent shadow-[0_0_24px_rgba(236,79,138,0.8)]" />
+      )}
+    </div>
   );
 }
 
@@ -183,23 +298,39 @@ export function Mannequin({
   bodyType = "Regular",
   fit = "perfect",
   rotation = 0,
+  scanning,
   product,
+  showSkeleton,
 }: MannequinProps) {
   const url = gender === "Male" ? MALE_URL : FEMALE_URL;
   const targets = useMemo(() => targetsFor(weight, gender, bodyType), [weight, gender, bodyType]);
+  const bodyScales = useMemo(
+    () => calculateBodyScales(height, weight, gender, bodyType, fit),
+    [height, weight, gender, bodyType, fit],
+  );
   const heightScale = useMemo(
     () => 0.88 + ((Math.max(140, Math.min(210, height)) - 140) / 70) * 0.24,
     [height],
   );
+  const dressedImage = product && !showSkeleton ? OUTFIT_IMAGE_MAP[product.id] : undefined;
+  const fallbackBodyImage = !dressedImage ? (gender === "Male" ? baseMaleImage : baseFemaleImage) : undefined;
+  const tryOnImage = dressedImage ?? fallbackBodyImage;
+  const tryOnLabel = product ? `${product.brand} ${product.name} on SmartFit avatar` : `${gender} SmartFit avatar`;
 
   // Debug log once per gender/bodyType change
   useEffect(() => {
-    console.info("[SmartFit Avatar]", { url, gender, bodyType, height, weight, targets });
-  }, [url, gender, bodyType, height, weight, targets]);
+    console.info("[SmartFit Avatar]", { url, gender, bodyType, height, weight, targets, bodyScales, dressed: Boolean(dressedImage) });
+  }, [url, gender, bodyType, height, weight, targets, bodyScales, dressedImage]);
 
   return (
     <div className="relative w-full aspect-[3/4] rounded-3xl overflow-hidden bg-gradient-to-b from-[#1a1622] via-[#0f0d18] to-[#080610] border border-white/5 shadow-2xl">
-      <Canvas shadows dpr={[1, 2]} camera={{ position: [0, 0.0, 4.4], fov: 28 }} gl={{ antialias: true, alpha: true }}>
+      <Canvas
+        className={tryOnImage ? "opacity-0" : "opacity-100"}
+        shadows
+        dpr={[1, 2]}
+        camera={{ position: [0, 0.0, 4.4], fov: 28 }}
+        gl={{ antialias: true, alpha: true }}
+      >
         <color attach="background" args={["#0f0d18"]} />
         <ambientLight intensity={0.55} />
         <directionalLight position={[2, 3, 2]} intensity={1.1} castShadow shadow-mapSize={[1024, 1024]} />
@@ -212,6 +343,8 @@ export function Mannequin({
             url={url}
             targets={targets}
             heightScale={heightScale}
+            widthScale={bodyScales.avatarWidth}
+            depthScale={bodyScales.avatarDepth}
             rotationY={THREE.MathUtils.degToRad(rotation)}
           />
           <ContactShadows position={[0, -0.9, 0]} opacity={0.6} scale={3.5} blur={2.6} far={1.5} />
@@ -227,12 +360,21 @@ export function Mannequin({
         />
       </Canvas>
 
+      {tryOnImage && (
+        <DressedTryOnLayer
+          image={tryOnImage}
+          label={tryOnLabel}
+          scales={bodyScales}
+          scanning={scanning}
+        />
+      )}
+
       {/* HUD */}
-      <div className="pointer-events-none absolute inset-x-0 top-0 flex items-center justify-between p-3 text-[10px] uppercase tracking-widest text-white/70">
+      <div className="pointer-events-none absolute inset-x-0 top-0 z-20 flex items-center justify-between p-3 text-[10px] uppercase tracking-widest text-white/70">
         <span className="rounded-full bg-black/40 px-2 py-0.5 backdrop-blur">{gender} · {bodyType}</span>
         <span className="rounded-full bg-black/40 px-2 py-0.5 backdrop-blur">{height}cm · {weight}kg</span>
       </div>
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center justify-between p-3 text-[10px] uppercase tracking-widest text-white/70">
+      <div className="pointer-events-none absolute inset-x-0 bottom-0 z-20 flex items-center justify-between p-3 text-[10px] uppercase tracking-widest text-white/70">
         <span className="rounded-full bg-black/40 px-2 py-0.5 backdrop-blur">
           {product ? `${product.brand} · ${product.name}` : "Mannequin"}
         </span>
