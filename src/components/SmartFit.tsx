@@ -600,6 +600,7 @@ function Results({
   const outfit = findById(activeOutfitId);
   const footwear = activeFootwearId ? findById(activeFootwearId) : null;
   const bag = activeBagId ? findById(activeBagId) : null;
+  const outfitImg = OUTFIT_IMAGE_MAP[outfit.id];
 
   const similar = useMemo(() => similarProducts(outfit, 6), [outfit]);
   const complete = useMemo(() => completeTheLook(outfit, 6), [outfit]);
@@ -649,13 +650,25 @@ function Results({
 
           {/* Selected garment card */}
           <div className="glass-strong rounded-2xl p-4 flex items-center gap-4">
-            <div
-              className="h-20 w-20 shrink-0 rounded-xl border border-white/10"
-              style={{
-                background: `radial-gradient(120% 90% at 30% 20%, ${outfit.accent ?? outfit.color}, ${outfit.color} 65%, #0b0b12 110%)`,
-                boxShadow: `0 8px 24px -8px ${outfit.color}88`,
-              }}
-            />
+            <div className="h-20 w-20 shrink-0 overflow-hidden rounded-xl border border-white/10 bg-white/[0.03]">
+              {outfitImg ? (
+                <img
+                  src={outfitImg}
+                  alt={`${outfit.brand} ${outfit.name}`}
+                  loading="lazy"
+                  decoding="async"
+                  className="h-full w-full object-cover object-top"
+                />
+              ) : (
+                <div
+                  className="h-full w-full"
+                  style={{
+                    background: `radial-gradient(120% 90% at 30% 20%, ${outfit.accent ?? outfit.color}, ${outfit.color} 65%, #0b0b12 110%)`,
+                    boxShadow: `0 8px 24px -8px ${outfit.color}88`,
+                  }}
+                />
+              )}
+            </div>
             <div className="min-w-0 flex-1">
               <div className="text-[10px] uppercase tracking-widest text-muted-foreground">{outfit.brand}</div>
               <div className="truncate font-display text-sm font-semibold">{outfit.name}</div>
