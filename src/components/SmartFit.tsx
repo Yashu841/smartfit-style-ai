@@ -19,7 +19,9 @@ import {
 import {
   Sparkles, Ruler, Wand2, ShieldCheck, ThumbsUp, ThumbsDown,
   ArrowRight, RotateCw, ChevronLeft, AlertTriangle, Heart,
+} from "lucide-react";
 import { submitSmartFitRecommendation, submitSmartFitFeedback } from "@/lib/smartfit.functions";
+
 
 
 function getUserId(): string {
