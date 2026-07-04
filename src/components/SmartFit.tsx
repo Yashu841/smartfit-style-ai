@@ -20,9 +20,9 @@ import {
   Sparkles, Ruler, Wand2, ShieldCheck, ThumbsUp, ThumbsDown,
   ArrowRight, RotateCw, ChevronLeft, AlertTriangle, Heart,
 } from "lucide-react";
+import { submitSmartFitRecommendation, submitSmartFitFeedback } from "@/lib/smartfit.functions";
 
-const WEBHOOK_URL = "https://hook.eu1.make.com/11jvi2slpo1x8f9ghdpqwymj4jgvebkh";
-const FEEDBACK_WEBHOOK_URL = "https://hook.eu1.make.com/ypjab5k5fa7wnj8zar87i2jygt2piwmq";
+
 
 function getUserId(): string {
   if (typeof window === "undefined") return "anon";
@@ -173,18 +173,13 @@ export function SmartFit() {
     const minDelay = new Promise((r) => setTimeout(r, 3400));
     let recommendation: Recommendation;
     try {
-      const res = await fetch(WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(`Webhook responded ${res.status}`);
-      const text = await res.text();
+      const res = await submitSmartFitRecommendation({ data: payload });
+      const text = res?.data ?? "";
       let json: unknown = null;
-      try { json = JSON.parse(text); } catch { json = text ? { raw: text } : null; }
+      try { json = typeof text === "string" && text ? JSON.parse(text) : text; } catch { json = text ? { raw: text } : null; }
       recommendation = parseRecommendation(json, profile);
     } catch (err) {
-      console.error("SmartFit webhook failed:", err);
+      console.error("SmartFit recommendation failed:", err);
       toast.error("AI service unreachable — showing offline recommendation.");
       recommendation = { ...localFallback(profile), fallback: true };
     }
@@ -982,13 +977,10 @@ function FeedbackSection({ productId, recommendedSize }: { productId: string; re
       submitted_at: new Date().toISOString(),
     };
     try {
-      // Fire-and-forget: do not await response from feedback webhook
-      fetch(FEEDBACK_WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        keepalive: true,
-      }).catch((err) => console.error("Feedback webhook failed:", err));
+      // Fire-and-forget: do not await response from feedback proxy
+      submitSmartFitFeedback({ data: payload }).catch((err) =>
+        console.error("Feedback submission failed:", err),
+      );
       setSubmitted(true);
       toast.success("Feedback received. SmartFit AI just got smarter.");
     } catch (err) {
