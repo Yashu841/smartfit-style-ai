@@ -19,10 +19,8 @@ import {
 import {
   Sparkles, Ruler, Wand2, ShieldCheck, ThumbsUp, ThumbsDown,
   ArrowRight, RotateCw, ChevronLeft, AlertTriangle, Heart,
-} from "lucide-react";
+import { submitSmartFitRecommendation, submitSmartFitFeedback } from "@/lib/smartfit.functions";
 
-const WEBHOOK_URL = "https://hook.eu1.make.com/11jvi2slpo1x8f9ghdpqwymj4jgvebkh";
-const FEEDBACK_WEBHOOK_URL = "https://hook.eu1.make.com/ypjab5k5fa7wnj8zar87i2jygt2piwmq";
 
 function getUserId(): string {
   if (typeof window === "undefined") return "anon";
