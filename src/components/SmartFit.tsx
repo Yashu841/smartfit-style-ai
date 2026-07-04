@@ -977,13 +977,10 @@ function FeedbackSection({ productId, recommendedSize }: { productId: string; re
       submitted_at: new Date().toISOString(),
     };
     try {
-      // Fire-and-forget: do not await response from feedback webhook
-      fetch(FEEDBACK_WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-        keepalive: true,
-      }).catch((err) => console.error("Feedback webhook failed:", err));
+      // Fire-and-forget: do not await response from feedback proxy
+      submitSmartFitFeedback({ data: payload }).catch((err) =>
+        console.error("Feedback submission failed:", err),
+      );
       setSubmitted(true);
       toast.success("Feedback received. SmartFit AI just got smarter.");
     } catch (err) {
