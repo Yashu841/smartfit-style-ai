@@ -53,11 +53,7 @@ export const submitSmartFitRecommendation = createServerFn({ method: "POST" })
       throw new Error("Recommendation service failed");
     }
     const text = await res.text();
-    try {
-      return { data: JSON.parse(text) as unknown };
-    } catch {
-      return { data: text ? { raw: text } : null };
-    }
+    return { data: text };
   });
 
 export const submitSmartFitFeedback = createServerFn({ method: "POST" })
