@@ -173,18 +173,13 @@ export function SmartFit() {
     const minDelay = new Promise((r) => setTimeout(r, 3400));
     let recommendation: Recommendation;
     try {
-      const res = await fetch(WEBHOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(payload),
-      });
-      if (!res.ok) throw new Error(`Webhook responded ${res.status}`);
-      const text = await res.text();
+      const res = await submitSmartFitRecommendation({ data: payload });
+      const text = res?.data ?? "";
       let json: unknown = null;
-      try { json = JSON.parse(text); } catch { json = text ? { raw: text } : null; }
+      try { json = typeof text === "string" && text ? JSON.parse(text) : text; } catch { json = text ? { raw: text } : null; }
       recommendation = parseRecommendation(json, profile);
     } catch (err) {
-      console.error("SmartFit webhook failed:", err);
+      console.error("SmartFit recommendation failed:", err);
       toast.error("AI service unreachable — showing offline recommendation.");
       recommendation = { ...localFallback(profile), fallback: true };
     }
