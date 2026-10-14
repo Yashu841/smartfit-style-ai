@@ -63,7 +63,7 @@ type Recommendation = {
 const PROCESSING_STEPS = [
   "Analyzing body proportions…",
   "Mapping garment to your silhouette…",
-  "Cross-referencing 2M+ fit reviews…",
+  "Preparing a personalized size recommendation…",
   "Generating personalized recommendation…",
 ];
 
@@ -255,14 +255,14 @@ function Hero({ onStart }: { onStart: () => void }) {
       <div className="space-y-8 animate-fade-up">
         <div className="inline-flex items-center gap-2 rounded-full glass px-4 py-1.5 text-xs font-medium text-muted-foreground">
           <span className="h-1.5 w-1.5 rounded-full bg-[var(--color-success)] animate-pulse" />
-          AI Fashion Lab · v3.0 live
+          AI Fashion Lab · Portfolio prototype
         </div>
         <h1 className="font-display text-5xl font-bold leading-[1.05] tracking-tight sm:text-6xl lg:text-7xl">
           Try it on. <br /><span className="gradient-text">Before you buy it.</span>
         </h1>
         <p className="max-w-xl text-lg leading-relaxed text-muted-foreground">
           SmartFit AI builds a virtual you — your height, weight, body type — then dresses you in the exact garment
-          you're shopping. Real silhouettes. Real drape. Real fit confidence.
+          you're shopping. Explore personalized sizing, interactive fit visualization, and feedback capture.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button size="lg" onClick={onStart} className="h-14 rounded-full gradient-primary btn-glow px-7 text-base font-semibold">
@@ -272,18 +272,18 @@ function Hero({ onStart }: { onStart: () => void }) {
             <ShieldCheck className="h-4 w-4" /> Private · No camera required
           </div>
         </div>
-        <div className="grid max-w-md grid-cols-3 gap-4 pt-4">
+        <div className="grid max-w-xl grid-cols-1 gap-3 pt-4 sm:grid-cols-3">
           {[
-            { k: "94%", v: "Fit accuracy" },
-            { k: "2M+", v: "Fit reviews" },
-            { k: "<3s", v: "Try-on render" },
+            "Personalized size recommendations",
+            "Interactive fit visualization",
+            "Feedback capture",
           ].map((s) => (
-            <div key={s.v} className="glass rounded-2xl p-4">
-              <div className="font-display text-2xl font-semibold gradient-text">{s.k}</div>
-              <div className="text-xs text-muted-foreground">{s.v}</div>
+            <div key={s} className="glass flex min-h-20 items-center rounded-2xl p-4 text-sm font-medium text-foreground/90">
+              {s}
             </div>
           ))}
         </div>
+        <p className="text-xs text-muted-foreground/75">A portfolio prototype, not a production-validated fitting service.</p>
       </div>
 
       <div className="relative animate-fade-in">
@@ -301,7 +301,7 @@ function Hero({ onStart }: { onStart: () => void }) {
           <Ruler className="h-3.5 w-3.5" /> Wearing the actual Zara dress
         </FloatingBubble>
         <FloatingBubble className="left-4 bottom-16" delay="2.4s">
-          <Sparkles className="h-3.5 w-3.5" /> 94% confidence match
+          <Sparkles className="h-3.5 w-3.5" /> Personalized size recommendation
         </FloatingBubble>
       </div>
     </section>
