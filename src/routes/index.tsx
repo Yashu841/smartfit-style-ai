@@ -4,17 +4,19 @@ import { SmartFit } from "@/components/SmartFit";
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "SmartFit AI — Find Your Perfect Fit | Myntra" },
+      { title: "SmartFit AI — Personalized Styling Prototype | Myntra" },
       {
         name: "description",
         content:
-          "SmartFit AI by Myntra analyzes your body, fit preference and brand sizing to recommend your ideal size with a virtual try-on in seconds.",
+          "Explore personalized size recommendations, interactive fit visualization, and feedback capture in the SmartFit AI portfolio prototype.",
       },
-      { property: "og:title", content: "SmartFit AI — Find Your Perfect Fit | Myntra" },
+      { property: "og:title", content: "SmartFit AI — Personalized Styling Prototype | Myntra" },
       {
         property: "og:description",
-        content: "AI-powered sizing & virtual try-on for premium fashion shopping.",
+        content: "A portfolio prototype for personalized size recommendations and interactive fit visualization.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary" },
     ],
   }),
   component: SmartFit,

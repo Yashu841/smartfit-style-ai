@@ -261,8 +261,7 @@ function Hero({ onStart }: { onStart: () => void }) {
           Try it on. <br /><span className="gradient-text">Before you buy it.</span>
         </h1>
         <p className="max-w-xl text-lg leading-relaxed text-muted-foreground">
-          SmartFit AI builds a virtual you — your height, weight, body type — then dresses you in the exact garment
-          you're shopping. Explore personalized sizing, interactive fit visualization, and feedback capture.
+          Explore outfit imagery, personalized size suggestions, and a fit visualization based on the profile you provide.
         </p>
         <div className="flex flex-wrap items-center gap-3">
           <Button size="lg" onClick={onStart} className="h-14 rounded-full gradient-primary btn-glow px-7 text-base font-semibold">
